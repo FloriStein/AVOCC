@@ -5,8 +5,8 @@ proto-gen:
 	@echo "Generating Go proto code..."
 	protoc \
 		--proto_path=proto \
-		--go_out=gen/go \
-		--go_opt=paths=source_relative \
+		--go_out=. \
+		--go_opt=module=avoc \
 		proto/*.proto
 	@echo "Generating TypeScript proto code..."
 	protoc \

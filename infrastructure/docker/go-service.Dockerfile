@@ -17,9 +17,12 @@ RUN go mod download
 
 COPY . .
 
-# Generate proto code
-RUN mkdir -p gen/go && \
-    protoc --proto_path=proto --go_out=gen/go --go_opt=paths=source_relative proto/*.proto
+# Generate proto code (--go_opt=module=avoc produces correct directory structure
+# matching the go_package import paths, e.g. gen/go/control/v1/control.pb.go)
+RUN protoc --proto_path=proto \
+    --go_out=. \
+    --go_opt=module=avoc \
+    proto/*.proto
 
 # Build the specific service
 RUN go build -o /service ./cmd/${SERVICE_NAME}

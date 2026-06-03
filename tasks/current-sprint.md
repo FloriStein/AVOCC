@@ -1,29 +1,23 @@
-# Sprint 3 — Frontend Core
+# Sprint 4 — Core Backend Services
 
-Ziel: Frontend kommuniziert live mit Backend. SYSTEM STATE sichtbar. SAFE MODE blockiert Steuerung. Emergency Stop und Dead-man Switch funktionieren.
+Ziel: Vollständige Steuerkette. Protobuf-Parsing serverseitig. MQTT-Telemetrie aktiv. Session Recording. WebRTC SFU empfängt Session-Events und bereitet Signaling vor.
 
 Datum: 2026-06-03
-Status: ✅ Abgeschlossen
-Vorgänger: Sprint 2 ✅ (Safety & Failure Model — 19/19 Tests grün, alle CRITICAL Trigger verifiziert)
+Vorgänger: Sprint 3 ✅ (Frontend Core — State-Polling, SAFE MODE, E-Stop, Dead-man live)
 
 ---
 
-## Ausgangslage (aus Sprint 2)
+## Ausgangslage (aus Sprint 3)
 
 | Was existiert | Stand |
 |---------------|-------|
-| `frontend/src/App.tsx` | UI-Shell vollständig: Header, Video Panel, Safety Panel, Connection Panel, Control Bar. Alles hardcoded/disabled. Kein Live-Zustand. |
-| `frontend/package.json` | React 18 + TypeScript + Vite + Tailwind. Kein `@bufbuild/protobuf`, kein ULID. |
-| `infrastructure/docker/nginx.conf` | Nur `/ws` proxied. Kein `/api/`-Proxy. |
-| `gen/ts/` | Leer — Proto-Code-Gen für TypeScript nie ausgeführt. |
-| `cmd/control-server/main.go` | Alle Sprint-2-Endpoints vorhanden (`/session/start`, `/handover/*`, `/state`). Kein `/emergency-stop`-Proxy. |
-| WS-Handler | Akzeptiert alle Bytes, antwortet `{"ack":true}`. Kein Protobuf-Parsing serverseitig (bis BE-04). |
-| Dead-man Watchdog | Resettet auf **jede** eingehende WS-Nachricht (Sprint-2-Vereinfachung, bis BE-04). |
-
-**Sprint-3-Einschränkungen (explizit):**
-- Frontend sendet Protobuf-codierte `ControlCommand`-Nachrichten, Server parst sie noch nicht (kommt mit BE-04 in Sprint 4)
-- Server-ACK ist `{"ack":true}` (kein Protobuf `ControlAck` bis BE-04) → Latenzanzeige misst JSON-Roundtrip
-- State-Sync via Polling `GET /api/state` (500ms Intervall) — WebSocket-State-Push kommt mit BE-04
+| `transport/websocket.go` `readLoop` | Zwei `TODO BE-04`-Kommentare: Protobuf-Parsing + Command-Routing fehlt noch; Deadman resettet auf jede Nachricht (Workaround); ACK ist `{"ack":true}` (JSON statt Protobuf) |
+| `cmd/telemetry-service/main.go` | Stub — nur `/health`; `internal/telemetryservice/` leer; Mosquitto läuft auf Port 1883 |
+| `cmd/webrtc-sfu/main.go` | Stub — nur `/health`; `internal/webrtcsfu/` leer; SFU-Session-Events werden schon vom Control Server gepusht (`HTTPSFUPublisher`), kommen aber nirgends an |
+| `go.mod` | `paho.mqtt.golang` und `google.golang.org/protobuf` durch `go mod tidy` entfernt — müssen wieder hinzugefügt werden |
+| `go-service.Dockerfile` | Proto-Gen nutzt `--go_opt=paths=source_relative` → Dateien landen in `gen/go/control.pb.go`, aber Import-Pfad lautet `avoc/gen/go/control/v1` — **Mismatch, bisher unbemerkt weil Gen-Code noch nicht importiert wird** |
+| `docker-compose.yml` | Kommentar bei coturn: "Relay ports activated in Sprint 4"; webrtc-sfu hat keine UDP-Port-Range exposed |
+| Frontend | Dead-man sendet Protobuf `DEADMAN_HOLD`, ACK-Latenzanzeige misst JSON-Roundtrip (Sprint-3-Vereinfachung) |
 
 ---
 
@@ -31,173 +25,188 @@ Vorgänger: Sprint 2 ✅ (Safety & Failure Model — 19/19 Tests grün, alle CRI
 
 | ID | Task | Typ | Status | Notizen |
 |----|------|-----|--------|---------|
-| FE-09 | Frontend Protobuf Adapter + Build-Pipeline | M | ✅ Done | ADR-012b/013/016; `@bufbuild/protobuf` + `@bufbuild/protoc-gen-es`; Dockerfile anpassen; nginx API-Proxy; gen in `frontend/src/gen/` (gitignored) |
-| FE-02 | WebSocket Client + State-Polling | M | ✅ Done | ADR-008/010/011/012b; `src/lib/ws-client.ts`; JWT-Auth; Reconnect mit Exponential Backoff; Polling `GET /api/state`; `useSystemState` Hook |
-| FE-08 | SAFE MODE Overlay + Operator Ack Flow | M | ✅ Done | ADR-009/011/015; Overlay blockiert alle Inputs; Resume-Flow (reconnect + `/api/session/start`); DEGRADED-Banner |
-| FE-04 | Safety Controls — Emergency Stop + Dead-man Switch | M | ✅ Done | ADR-009/015; E-Stop → `POST /api/emergency-stop`; Dead-man via Spacebar/Mousedown (hält WS-Reset aktiv); Operator-Ack vor erster Aktivierung |
-| FE-03 | Connection Status — Live-Anzeige | S | ✅ Done | ADR-016; Latenz (JSON ACK-Roundtrip), SYSTEM STATE Badge, Session-ID, Operator-Rolle |
+| INFRA-02 | Proto-Gen Fix — Go Output-Pfade korrigieren | S | 🔲 Todo | `paths=source_relative` → Mismatch mit go_package Import-Pfaden; Fix: `--go_opt=module=avoc --go_out=.`; Prerequisite für BE-04 |
+| BE-04 | Command Engine — Protobuf-Parsing + Routing + ControlAck | M | 🔲 Todo | ADR-007/010/012b/016; neues Paket `internal/controlserver/command/`; DEADMAN_HOLD/RELEASE, EMERGENCY_STOP, STEER/THROTTLE/BRAKE/SPEED; Rate Limiting; Protobuf `ControlAck` zurücksenden; Frontend-Latenzanzeige wird exakt |
+| BE-05 | MQTT Telemetry Service — Mosquitto Client + Pub/Sub | M | 🔲 Todo | ADR-003/008/016; `internal/telemetryservice/` implementieren; Protobuf TelemetryEvent; Subscribe vehicle/+/telemetry; GET /telemetry/latest/{vehicleId}; paho.mqtt.golang in go.mod |
+| BE-07 | Session Recording — Interface + In-Memory Adapter | M | 🔲 Todo | ADR-005/016; `internal/recording/`; SessionRecorder Interface + MockRecorder; in Control Server integrieren; session_id als Root Key |
+| BE-08 | WebRTC SFU — Pion/Go + Session Event Consumer | M | 🔲 Todo | ADR-014/015; `internal/webrtcsfu/` implementieren; Session Event HTTP-Endpunkt; SDP-Signaling-Infrastruktur (SDP/ICE über bestehenden WS-Kanal); Primary Stream Routing; MEDIA STATE Notifications; pion/webrtc/v4 in go.mod; coturn Relay-Ports in docker-compose.yml aktivieren |
 
 ---
 
 ## Abhängigkeitspfad
 
 ```
-FE-09 (Proto + Build-Pipeline + nginx) — sofort startbar
+INFRA-02 (S — sofort, Prerequisite für BE-04)
   │
   ▼
-FE-02 (WS Client + State-Polling) ──────────────────────────────┐
-  │                                                             │
-  ├──▶ FE-08 (SAFE MODE Overlay + Ack Flow)                    │
-  ├──▶ FE-04 (Emergency Stop + Dead-man)                       │
-  └──▶ FE-03 (Connection Status — S-Task, schnell)             │
-                                                                ▼
-                                                   Sprint 3 DoD erfüllt ✓
+BE-04 ───────────────────────────────────────────────────────────┐
+BE-05 (parallel, kein BE-04 nötig) ──────────────────────────── │→ Sprint 4 DoD ✓
+BE-07 (parallel, kein BE-04 nötig) ──────────────────────────── │
+BE-08 (parallel, längste Task) ──────────────────────────────── ┘
 ```
 
 ---
 
 ## Implementierungsdetails je Task
 
-### FE-09 — Protobuf Adapter + Build-Pipeline
+### INFRA-02 — Proto-Gen Fix
 
-**`frontend/package.json` — neue Dependencies:**
-```json
-"dependencies": {
-  "@bufbuild/protobuf": "^2.x"
-},
-"devDependencies": {
-  "@bufbuild/protoc-gen-es": "^2.x"
-},
-"scripts": {
-  "proto-gen": "protoc --proto_path=../proto --es_out=src/gen --es_opt=target=ts ../proto/*.proto",
-  "prebuild": "npm run proto-gen",
-  "build": "tsc -b && vite build"
-}
+**Problem:** `go-service.Dockerfile` nutzt:
+```bash
+protoc --proto_path=proto --go_out=gen/go --go_opt=paths=source_relative proto/*.proto
 ```
+→ Erzeugt `gen/go/control.pb.go`, aber Import-Pfad lautet `avoc/gen/go/control/v1`.
+Go kann das nicht auflösen.
 
-**`infrastructure/docker/frontend.Dockerfile`** — protoc-Installation vor Build:
-```dockerfile
-FROM node:22-alpine AS builder
-WORKDIR /app
-RUN apk add --no-cache protobuf
-RUN npm install -g @bufbuild/protoc-gen-es@latest
-COPY frontend/package*.json ./
-RUN npm ci
-COPY frontend/ .
-COPY proto/ ../proto/
-RUN npm run proto-gen
-RUN npm run build
+**Fix:**
+```bash
+protoc --proto_path=proto \
+  --go_out=. \
+  --go_opt=module=avoc \
+  proto/*.proto
 ```
+→ Erzeugt `gen/go/control/v1/control.pb.go` — passt zu `import "avoc/gen/go/control/v1"`.
 
-**`frontend/.gitignore`** — `src/gen/` hinzufügen
-
-**`infrastructure/docker/nginx.conf`** — API-Proxy ergänzen:
-```nginx
-location /api/ {
-    proxy_pass http://control-server:8080/;
-}
-location /auth/ {
-    proxy_pass http://auth-service:8081/auth/;
-}
-location /vehicle/ws {
-    proxy_pass http://control-server:8080;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-}
-```
-
-**`cmd/control-server/main.go`** — `/api/emergency-stop` Endpunkt hinzufügen (Proxy zu safety-service), damit Frontend keine Cross-Origin-Requests braucht.
-
-**Generierte Dateien:** `frontend/src/gen/common_pb.ts`, `control_pb.ts`, `safety_pb.ts`, `session_pb.ts`, `telemetry_pb.ts`
+Gleiches Fix-Pattern für `Makefile` target `proto-gen`.
 
 ---
 
-### FE-02 — WebSocket Client + State-Polling
+### BE-04 — Command Engine
 
-**`frontend/src/lib/ws-client.ts`:**
-```typescript
-class WSClient {
-  connect(wsUrl: string, token: string): void
-  sendCommand(cmd: ControlCommand): Promise<number> // returns latency ms
-  disconnect(): void
-  onClose: (() => void) | null
+**Neues Paket:** `internal/controlserver/command/engine.go`
+
+```go
+type Engine struct {
+    sm          *statemachine.Machine
+    safetyPub   safety.Publisher
+    sessionMgr  *session.Manager
+    deadman     *safety.DeadmanWatchdog
+    rateLimiter *rate.Limiter   // golang.org/x/time/rate, 100 cmd/s
 }
-```
-- Reconnect: Exponential Backoff (1s, 2s, 4s, 8s, max 30s) nach Channel Close
-- Latenz-Messung: `Date.now()` vor Send — `Date.now()` nach ACK-Empfang
-- CorrelationHeader: `session_id` aus Context + `event_id` via ULID (`ulidx` npm package)
 
-**`frontend/src/lib/api-client.ts`:**
-```typescript
-login(operatorId: string): Promise<string>          // → JWT token
-startSession(vehicleId: string, operatorId: string): Promise<string>  // → session_id
-getState(): Promise<SystemStateResponse>
-emergencyStop(sessionId: string, vehicleId: string): Promise<void>
+func (e *Engine) Handle(rawMsg []byte, sess session.Session) (ackBytes []byte, err error)
 ```
 
-**`frontend/src/hooks/useSystemState.ts`:**
-- Pollt `GET /api/state` alle 500ms
-- Gibt `{ system, control, media, operator, sessionId, latency }` zurück
-- Stoppt Polling bei `SAFE_MODE` (kein unnötiger Traffic)
+**Routing nach CommandType:**
 
-**`frontend/src/hooks/useSession.ts`:**
-- Verwaltet Login-Flow → JWT → WS-Connect → Session-Start
-- Exponential Backoff Reconnect nach SAFE_MODE
-- Stellt `sessionId`, `operatorRole`, `connect()`, `disconnect()` bereit
+| CommandType | Aktion |
+|-------------|--------|
+| `DEADMAN_HOLD` | `deadman.Reset()` (ersetzt den Workaround in readLoop) |
+| `DEADMAN_RELEASE` | kein Reset — Watchdog läuft ab |
+| `EMERGENCY_STOP` | `safetyPub.TriggerEmergencyStop(...)` + `sm.TransitionSystem(SAFE_MODE)` |
+| `STEER / THROTTLE / BRAKE / SPEED` | Rate Limiting → Log → (Sprint 5: an Vehicle weiterleiten) |
+
+**ControlAck zurücksenden:**
+```go
+ack := create(ControlAckSchema, {
+    header: { sessionId, eventId: ulid.Generate(), ... },
+    success: true,
+})
+conn.WriteMessage(websocket.BinaryMessage, toBinary(ControlAckSchema, ack))
+```
+
+→ Frontend `ws-client.ts` empfängt Binary-ACK → `onmessage` feuert → Latenz korrekt gemessen.
+
+**Rate Limiting:** Token Bucket, 100 commands/s. Überschreitung → `ControlAck{success: false, error_msg: "rate limited"}`, kein SAFE_MODE.
+
+**`readLoop`-Integration:** Die beiden `TODO BE-04`-Kommentare in `transport/websocket.go` werden durch `engine.Handle(msg, sess)` ersetzt.
 
 ---
 
-### FE-08 — SAFE MODE Overlay + Operator Ack Flow
+### BE-05 — MQTT Telemetry Service
 
-**`frontend/src/components/SafeModeOverlay.tsx`:**
-- Fullscreen-Overlay über allem (z-index hoch)
-- Zeigt Safety Reason aus letztem State
-- "Resume — Operator Acknowledgment" Button
-- Klick → `connect()` (Reconnect) → `startSession()` → CONNECTED
-- DEGRADED: kein Overlay, aber gelber Banner über Video Panel
+**Neue Dateien:**
+- `internal/telemetryservice/client.go` — Paho MQTT-Client (connect, subscribe, reconnect)
+- `internal/telemetryservice/handler.go` — TelemetryEvent-Parsing + Speicherung
+- `cmd/telemetry-service/main.go` — vollständig implementieren
 
-**App.tsx-Integration:**
-- `{systemState === 'SAFE_MODE' && <SafeModeOverlay />}` — overlay erscheint
-- Alle Steuerungselemente werden bei `systemState === 'SAFE_MODE'` disabled
+**Topics:**
+- Subscribe: `vehicle/+/telemetry` → empfängt Protobuf `TelemetryEvent`
+- Publish: `system/state` → publiziert SYSTEM STATE Änderungen (optional Sprint 4)
+
+**HTTP-Endpunkte:**
+- `GET /telemetry/latest/{vehicleId}` → letzte TelemetryEvent als JSON (für Frontend Connection Panel)
+- `GET /health` → bereits vorhanden
+
+**go.mod:** `github.com/eclipse/paho.mqtt.golang v1.4.3` wieder hinzufügen.
+
+**docker-compose.yml:** `control-server` bekommt `TELEMETRY_SERVICE_URL` Env-Var.
 
 ---
 
-### FE-04 — Safety Controls
+### BE-07 — Session Recording
 
-**`frontend/src/components/SafetyPanel.tsx`** (extrahiert aus App.tsx):
+**Neues Paket:** `internal/recording/`
 
-**Emergency Stop:**
-- `POST /api/emergency-stop` mit `{session_id, vehicle_id, reason: "operator"}`
-- Button disabled wenn `systemState === 'SAFE_MODE'` (bereits in SAFE_MODE)
-- Button rot, Hover-State klar
-
-**Dead-man Switch:**
-- `mousedown` / Spacebar gedrückt → `active = true`
-- `mouseup` / Spacebar losgelassen → `active = false` → Server-Watchdog läuft ab → SAFE_MODE
-- Während aktiv: alle 500ms eine WS-Nachricht senden (reset deadman watchdog)
-- Visual: grüner Halo wenn aktiv, grau wenn inaktiv
-
-**`frontend/src/hooks/useDeadmanSwitch.ts`:**
-```typescript
-function useDeadmanSwitch(wsClient: WSClient | null, sessionId: string): {
-  isActive: boolean
-  bind: { onMouseDown, onMouseUp, onKeyDown, onKeyUp }
+```go
+// recorder.go — Interface (ADR-005)
+type SessionRecorder interface {
+    StartSession(sessionID, vehicleID, operatorID string)
+    EndSession(sessionID string)
+    RecordControlEvent(header CorrelationHeader, cmdType string, value float32)
+    RecordStateSnapshot(header CorrelationHeader, sysState, ctrlState string)
+    RecordSafetyEvent(header CorrelationHeader, eventType string, reason string)
 }
+
+// memory_recorder.go — In-Memory Mock (Sprint 4)
+type MemoryRecorder struct { ... }
+
+// noop_recorder.go — No-op (default wenn kein Recorder konfiguriert)
+type NoopRecorder struct{}
 ```
-- Interval-Timer (400ms) sendet Protobuf `COMMAND_TYPE_DEADMAN_HOLD` solange aktiv
-- Cleanup bei Unmount / SAFE_MODE-Eintritt
+
+**Integration in Control Server:**
+- `SessionRecorder` wird in `cmd/control-server/main.go` instanziiert (default: `MemoryRecorder`)
+- `session/manager.go` ruft `RecordStateSnapshot` bei State-Transitionen auf
+- `transport/websocket.go` ruft `RecordControlEvent` nach `engine.Handle()` auf
+- Bei SAFE_MODE: `RecordSafetyEvent`
+
+**Hinweis:** Storage-ADR (ADR-005 Folge) ist noch offen → `MemoryRecorder` als Platzhalter. Kein File/DB-Adapter in Sprint 4.
 
 ---
 
-### FE-03 — Connection Status
+### BE-08 — WebRTC SFU (Pion/Go)
 
-**`frontend/src/components/ConnectionPanel.tsx`** (extrahiert aus App.tsx):
-- SYSTEM STATE Badge (live, farbig)
-- Latenz in ms (aus WSClient ACK-Roundtrip, aktualisiert bei jedem Command)
-- Session-ID (gekürzt: erste 8 Zeichen + `…`)
-- Operator-Rolle (ACTIVE_OPERATOR / OBSERVER / STANDBY)
-- Verbindungsstatus-Dot (grün/gelb/rot)
+**Neues Paket:** `internal/webrtcsfu/`
+
+**Sprint-4-Scope (minimal viable):**
+1. Session Event Consumer (`POST /session/event`)
+2. SDP Signaling-Infrastruktur (HTTP-Endpunkte für SDP/ICE)
+3. Primary Stream: Vehicle verbindet sich, SFU empfängt RTP und routet an Operator
+4. MEDIA STATE Notifications an Control Server
+
+**Deferred auf Sprint 5:**
+- Secondary Streams (on-demand)
+- Server-seitiges Recording
+- Multi-Operator Forwarding (>1 Observer)
+
+**Neue Endpunkte im SFU:**
+```
+POST /session/event          ← Control Server pusht SESSION_* Events
+POST /offer                  ← Vehicle sendet SDP Offer
+POST /answer/{vehicleId}     ← Operator empfängt SDP Answer
+POST /ice/{peerId}           ← ICE Candidate Exchange
+GET  /health                 ← bereits vorhanden
+```
+
+**go.mod:** `github.com/pion/webrtc/v4` hinzufügen.
+
+**docker-compose.yml:**
+```yaml
+webrtc-sfu:
+  environment:
+    SFU_PORT: "8084"
+    CONTROL_SERVER_URL: "http://control-server:8080"
+  ports:
+    - "8084:8084"
+    - "10000-10100:10000-10100/udp"   # WebRTC Media Ports
+
+stun-turn:
+  ports:
+    - "49152-49200:49152-49200/udp"   # coturn Relay Ports (Sprint 4)
+```
+
+**nginx.conf:** `/sfu/` Proxy-Route ergänzen (für Frontend SDP Signaling in Sprint 5).
 
 ---
 
@@ -205,24 +214,26 @@ function useDeadmanSwitch(wsClient: WSClient | null, sessionId: string): {
 
 | Datei | Änderung |
 |-------|---------|
-| `infrastructure/docker/nginx.conf` | `/api/` und `/auth/` Proxy-Routen ergänzen |
-| `infrastructure/docker/frontend.Dockerfile` | protoc + protoc-gen-es installieren + `npm run proto-gen` vor Build |
-| `frontend/package.json` | `@bufbuild/protobuf` + `@bufbuild/protoc-gen-es` + `ulidx` |
-| `frontend/.gitignore` | `src/gen/` ergänzen |
-| `cmd/control-server/main.go` | `/api/emergency-stop` Proxy-Endpunkt |
+| `go-service.Dockerfile` | Proto-Gen Fix: `--go_opt=module=avoc --go_out=.` |
+| `Makefile` target `proto-gen` | Gleicher Fix |
+| `go.mod` | `paho.mqtt.golang`, `pion/webrtc/v4`, `google.golang.org/protobuf` wieder aufnehmen |
+| `docker-compose.yml` | WebRTC UDP-Port-Range, coturn Relay-Ports, neue Env-Vars |
+| `nginx.conf` | `/sfu/` Proxy-Route |
 
 ---
 
 ## Sprint-Ziel / Definition of Done
 
-- [ ] Protobuf-Klassen werden build-time generiert (`ControlCommand`, `ControlAck`, `CorrelationHeader`)
-- [ ] Frontend loggt sich ein (JWT), verbindet WebSocket, startet Session
-- [ ] SYSTEM STATE aus `/api/state` wird live im UI angezeigt (Polling 500ms)
-- [ ] CONNECTED → State-Badge grün, Control-Elemente aktiv
-- [ ] Dead-man Switch (Spacebar/Button halten) resettet Watchdog — Loslassen → SAFE_MODE nach 2s
-- [ ] Emergency Stop → `POST /api/emergency-stop` → SAFE_MODE sofort
-- [ ] SAFE MODE Overlay erscheint, blockiert alle Steuerungselemente vollständig
-- [ ] "Resume / Operator Ack" reconnectet und startet neue Session
-- [ ] DEGRADED State: gelber Banner sichtbar, Steuerung bleibt möglich
-- [ ] Connection Panel zeigt Latenz, Session-ID, Operator-Rolle live
-- [ ] `docker-compose up --build` → alle Features im Browser nutzbar
+- [ ] INFRA-02: Proto-Gen erzeugt korrekte Go-Verzeichnisstruktur (`gen/go/control/v1/`, etc.)
+- [ ] BE-04: Server parsed Protobuf `ControlCommand` — DEADMAN_HOLD resettet Watchdog korrekt (statt jede Nachricht)
+- [ ] BE-04: `ControlAck` als Protobuf Binary zurückgesendet — Frontend-Latenzanzeige messen echten Protobuf-Roundtrip
+- [ ] BE-04: EMERGENCY_STOP Command → direkt SAFE_MODE (ohne separaten HTTP-Call)
+- [ ] BE-04: Rate Limiting aktiv (100 cmd/s, ACK mit error bei Überschreitung)
+- [ ] BE-05: Telemetry Service verbindet sich mit Mosquitto, subscribt Vehicle-Topics
+- [ ] BE-05: TelemetryEvent über Protobuf empfangbar, `GET /telemetry/latest/{vehicleId}` antwortet
+- [ ] BE-07: `SessionRecorder`-Interface implementiert, Control Server nutzt `MemoryRecorder`
+- [ ] BE-07: Control Events + Safety Events + State Snapshots werden aufgezeichnet
+- [ ] BE-08: SFU empfängt SESSION_* Events vom Control Server (SESSION_SAFE_MODE → Streams droppen)
+- [ ] BE-08: SDP Signaling-Endpunkte vorhanden, Vehicle kann WebRTC-Offer senden
+- [ ] BE-08: Primary Stream von Vehicle an Operator routbar (lokal testbar)
+- [ ] Sprint-2-Safety-Tests: weiterhin 19/19 grün
