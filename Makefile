@@ -25,11 +25,11 @@ build:
 
 # Start full stack
 up:
-	docker compose -f infrastructure/compose/docker-compose.yml up --build
+	docker compose -f infrastructure/compose/docker-compose.yml --env-file .env up --build
 
 # Stop full stack
 down:
-	docker compose -f infrastructure/compose/docker-compose.yml down
+	docker compose -f infrastructure/compose/docker-compose.yml --env-file .env down
 
 # Run all tests
 test:

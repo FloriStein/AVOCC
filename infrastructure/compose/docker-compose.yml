@@ -1,0 +1,125 @@
+name: avoc
+
+services:
+
+  # ─── Frontend ──────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/frontend.Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - control-server
+    networks:
+      - avoc-net
+
+  # ─── Control Server (Hub — Safety Truth, Session Manager GSA) ─────────────
+  control-server:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/go-service.Dockerfile
+      args:
+        SERVICE_NAME: control-server
+    ports:
+      - "8080:8080"
+    environment:
+      CONTROL_PORT: "8080"
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      - auth-service
+      - safety-service
+    networks:
+      - avoc-net
+
+  # ─── Auth Service ──────────────────────────────────────────────────────────
+  auth-service:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/go-service.Dockerfile
+      args:
+        SERVICE_NAME: auth-service
+    ports:
+      - "8081:8081"
+    environment:
+      AUTH_PORT: "8081"
+      JWT_SECRET: ${JWT_SECRET}
+    networks:
+      - avoc-net
+
+  # ─── Safety Service (Safety Event Bus) ────────────────────────────────────
+  safety-service:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/go-service.Dockerfile
+      args:
+        SERVICE_NAME: safety-service
+    ports:
+      - "8082:8082"
+    environment:
+      SAFETY_PORT: "8082"
+    networks:
+      - avoc-net
+
+  # ─── Telemetry Service (MQTT Bridge — Sprint 4) ────────────────────────────
+  telemetry-service:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/go-service.Dockerfile
+      args:
+        SERVICE_NAME: telemetry-service
+    ports:
+      - "8083:8083"
+    environment:
+      TELEMETRY_PORT: "8083"
+      MQTT_BROKER: "mosquitto:1883"
+    depends_on:
+      - mosquitto
+    networks:
+      - avoc-net
+
+  # ─── MQTT Broker ───────────────────────────────────────────────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - ../mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    networks:
+      - avoc-net
+
+  # ─── WebRTC SFU (Sprint 4) ─────────────────────────────────────────────────
+  webrtc-sfu:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/go-service.Dockerfile
+      args:
+        SERVICE_NAME: webrtc-sfu
+    ports:
+      - "8084:8084"
+    environment:
+      SFU_PORT: "8084"
+    networks:
+      - avoc-net
+
+  # ─── STUN/TURN (coturn) ────────────────────────────────────────────────────
+  stun-turn:
+    image: coturn/coturn:latest
+    ports:
+      - "3479:3478/udp"
+      - "3479:3478/tcp"
+      - "5350:5349/udp"
+      - "5350:5349/tcp"
+      # Relay ports activated in Sprint 4 when WebRTC SFU is implemented (ADR-014)
+    volumes:
+      - ../coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    environment:
+      TURN_REALM: ${TURN_REALM:-avoc.local}
+      TURN_USER: ${TURN_USER:-avoc}
+      TURN_PASSWORD: ${TURN_PASSWORD:-changeme}
+    networks:
+      - avoc-net
+
+networks:
+  avoc-net:
+    driver: bridge
