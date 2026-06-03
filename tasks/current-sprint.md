@@ -1,24 +1,28 @@
-# Sprint 2 — Safety & Failure Model
+# Sprint 3 — Frontend Core
 
-Ziel: 4-Layer State Machine vollständig. SAFE MODE deterministisch. Safety Test Suite grün.
+Ziel: Frontend kommuniziert live mit Backend. SYSTEM STATE sichtbar. SAFE MODE blockiert Steuerung. Emergency Stop und Dead-man Switch funktionieren.
 
 Datum: 2026-06-03
-Vorgänger: Sprint 1 ✅ (Foundation Layer — alle Services laufen, WS+JWT+Safety Bus verifiziert)
+Vorgänger: Sprint 2 ✅ (Safety & Failure Model — 19/19 Tests grün, alle CRITICAL Trigger verifiziert)
 
 ---
 
-## Ausgangslage (aus Sprint 1)
+## Ausgangslage (aus Sprint 2)
 
-Was bereits existiert und Sprint 2 als Basis dient:
+| Was existiert | Stand |
+|---------------|-------|
+| `frontend/src/App.tsx` | UI-Shell vollständig: Header, Video Panel, Safety Panel, Connection Panel, Control Bar. Alles hardcoded/disabled. Kein Live-Zustand. |
+| `frontend/package.json` | React 18 + TypeScript + Vite + Tailwind. Kein `@bufbuild/protobuf`, kein ULID. |
+| `infrastructure/docker/nginx.conf` | Nur `/ws` proxied. Kein `/api/`-Proxy. |
+| `gen/ts/` | Leer — Proto-Code-Gen für TypeScript nie ausgeführt. |
+| `cmd/control-server/main.go` | Alle Sprint-2-Endpoints vorhanden (`/session/start`, `/handover/*`, `/state`). Kein `/emergency-stop`-Proxy. |
+| WS-Handler | Akzeptiert alle Bytes, antwortet `{"ack":true}`. Kein Protobuf-Parsing serverseitig (bis BE-04). |
+| Dead-man Watchdog | Resettet auf **jede** eingehende WS-Nachricht (Sprint-2-Vereinfachung, bis BE-04). |
 
-| Datei | Stand |
-|-------|-------|
-| `internal/controlserver/statemachine/state.go` | 4 State-Typen + Machine-Struct + Basis-Transitionen (TransitionSystem/Media/Operator). Keine Checkpoint-Logik, kein Session-Manager. |
-| `internal/controlserver/transport/websocket.go` | WS + JWT-Auth + Heartbeat + SAFE_MODE bei WS-Disconnect. Kein ACK-Timeout, kein Dead-man-Switch. TODO: BE-04 (Command Engine). |
-| `internal/safetyservice/bus.go` | Vollständig: alle CRITICAL EventTypes, Pub/Sub, EmergencyStop, GetSafetyState, Subscribe, Reset. |
-| `internal/controlserver/session/` | Leer — Ziel von BE-09 |
-| `internal/controlserver/safety/` | Leer — Ziel von BE-10 |
-| `pkg/ulid/` | Leer — ULID-Wrapper für BE-09 |
+**Sprint-3-Einschränkungen (explizit):**
+- Frontend sendet Protobuf-codierte `ControlCommand`-Nachrichten, Server parst sie noch nicht (kommt mit BE-04 in Sprint 4)
+- Server-ACK ist `{"ack":true}` (kein Protobuf `ControlAck` bis BE-04) → Latenzanzeige misst JSON-Roundtrip
+- State-Sync via Polling `GET /api/state` (500ms Intervall) — WebSocket-State-Push kommt mit BE-04
 
 ---
 
@@ -26,107 +30,198 @@ Was bereits existiert und Sprint 2 als Basis dient:
 
 | ID | Task | Typ | Status | Notizen |
 |----|------|-----|--------|---------|
-| TEST-01 | Go Test Infrastructure — testify + Mock Pattern | S | 🔲 Todo | ADR-006; testify in go.mod; Mock-Interfaces für Safety Bus + SFU Event Stream; Basis für TEST-02 |
-| BE-06 | Vehicle Connection Service — Session Management | M | 🔲 Todo | ADR-015; Disconnect-Erkennung; SAFE_MODE-Trigger bei Vehicle-Disconnect; kein Session-State-Ownership (GSA = Control Server) |
-| BE-09 | Control Server — Session Manager (GSA) + State Machine Erweiterung | M | 🔲 Todo | ADR-011/015/016; `internal/controlserver/session/` + `pkg/ulid/`; ULID Session-ID bei CONNECTING→CONNECTED; Recovery Checkpoint bei SAFE_MODE; SFU Event-Push (SESSION_*); State Machine: volle Transition-Validierung |
-| BE-10 | Control Server — Failure Detection & Recovery | M | 🔲 Todo | ADR-009/010/011/015; Dead-man-Switch Timeout; Command ACK Timeout → SAFE_MODE; Exponential Backoff Reconnect; RECOVERING → SAFE_MODE-Fallback; Checkpoint laden bei Recovery |
-| BE-12 | Operator Handover Logic — Active/Observer/Standby | M | 🔲 Todo | ADR-011/015; OPERATOR STATE vervollständigen; HANDOVER_PENDING Transition; exklusiver ACTIVE_OPERATOR; Handover-Token via Auth Service; SFU Event: OPERATOR_HANDOVER |
-| TEST-02 | Safety Test Suite — `safety_test.go` | M | 🔲 Todo | ADR-006/009/011; alle 7 CRITICAL Trigger; MEDIA_FAILED→DEGRADED (nicht SAFE_MODE); Recovery Checkpoint validieren |
+| FE-09 | Frontend Protobuf Adapter + Build-Pipeline | M | 🔲 Todo | ADR-012b/013/016; `@bufbuild/protobuf` + `@bufbuild/protoc-gen-es`; Dockerfile anpassen; nginx API-Proxy; gen in `frontend/src/gen/` (gitignored) |
+| FE-02 | WebSocket Client + State-Polling | M | 🔲 Todo | ADR-008/010/011/012b; `src/lib/ws-client.ts`; JWT-Auth; Reconnect mit Exponential Backoff; Polling `GET /api/state`; `useSystemState` Hook |
+| FE-08 | SAFE MODE Overlay + Operator Ack Flow | M | 🔲 Todo | ADR-009/011/015; Overlay blockiert alle Inputs; Resume-Flow (reconnect + `/api/session/start`); DEGRADED-Banner |
+| FE-04 | Safety Controls — Emergency Stop + Dead-man Switch | M | 🔲 Todo | ADR-009/015; E-Stop → `POST /api/emergency-stop`; Dead-man via Spacebar/Mousedown (hält WS-Reset aktiv); Operator-Ack vor erster Aktivierung |
+| FE-03 | Connection Status — Live-Anzeige | S | 🔲 Todo | ADR-016; Latenz (JSON ACK-Roundtrip), SYSTEM STATE Badge, Session-ID, Operator-Rolle |
 
 ---
 
 ## Abhängigkeitspfad
 
 ```
-TEST-01 (sofort startbar) ──────────────────────────────────────┐
-BE-06   (BE-01✅ BE-02✅, sofort startbar) ──────────────────── │
-BE-09   (BE-02✅ BE-03✅, sofort startbar) → BE-10 ──────────── │→ TEST-02 ✓
-                                           → BE-12 ─────────────┘
+FE-09 (Proto + Build-Pipeline + nginx) — sofort startbar
+  │
+  ▼
+FE-02 (WS Client + State-Polling) ──────────────────────────────┐
+  │                                                             │
+  ├──▶ FE-08 (SAFE MODE Overlay + Ack Flow)                    │
+  ├──▶ FE-04 (Emergency Stop + Dead-man)                       │
+  └──▶ FE-03 (Connection Status — S-Task, schnell)             │
+                                                                ▼
+                                                   Sprint 3 DoD erfüllt ✓
 ```
-
-Parallelstart möglich: **TEST-01 + BE-06 + BE-09** haben keine gegenseitigen Abhängigkeiten.
 
 ---
 
 ## Implementierungsdetails je Task
 
-### TEST-01 — Go Test Infrastructure
-- `testify/assert` + `testify/mock` in `go.mod` aufnehmen
-- Mock-Interface für Safety Bus: `MockSafetyBus` (implementiert dieselbe Interface-Signatur wie `safetyservice.Bus`)
-- Mock-Interface für SFU Event Stream: `MockSFUPublisher`
-- Basis-Testdatei `internal/controlserver/session/session_test.go` anlegen
+### FE-09 — Protobuf Adapter + Build-Pipeline
 
-### BE-06 — Vehicle Connection Service
-- `internal/vehicleconnection/` Paket anlegen
-- Disconnect-Detection: Heartbeat-Ausfall vom Vehicle → `EventWSDisconnect` auf Safety Bus publishen
-- Kein Session-State-Ownership: nur Event-Publisher, kein State-Keeper
-- HTTP/WS-Handler für Vehicle-Verbindung (`/vehicle/ws`)
+**`frontend/package.json` — neue Dependencies:**
+```json
+"dependencies": {
+  "@bufbuild/protobuf": "^2.x"
+},
+"devDependencies": {
+  "@bufbuild/protoc-gen-es": "^2.x"
+},
+"scripts": {
+  "proto-gen": "protoc --proto_path=../proto --es_out=src/gen --es_opt=target=ts ../proto/*.proto",
+  "prebuild": "npm run proto-gen",
+  "build": "tsc -b && vite build"
+}
+```
 
-### BE-09 — Session Manager (GSA) + State Machine Erweiterung
-**`pkg/ulid/ulid.go`:**
-- Thin Wrapper um `oklog/ulid/v2`
-- `Generate() string` — threadsafe ULID
+**`infrastructure/docker/frontend.Dockerfile`** — protoc-Installation vor Build:
+```dockerfile
+FROM node:22-alpine AS builder
+WORKDIR /app
+RUN apk add --no-cache protobuf
+RUN npm install -g @bufbuild/protoc-gen-es@latest
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ .
+COPY proto/ ../proto/
+RUN npm run proto-gen
+RUN npm run build
+```
 
-**`internal/controlserver/session/manager.go`:**
-- `Session`-Struct: `SessionID (ULID)`, `VehicleID`, `OperatorID`, `OperatorRole`, `CreatedAt`
-- `RecoveryCheckpoint`-Struct: SessionID, VehicleID, OperatorID, LastSystemState, LastControlState, SafetyReason, CheckpointTS
-- `Manager.CreateSession(vehicleID, operatorID string) Session` — generiert ULID, Zeitpunkt CONNECTING→CONNECTED
-- `Manager.SaveCheckpoint(sm *statemachine.Machine, reason string)` — bei SAFE_MODE-Eintritt
-- `Manager.LoadCheckpoint() (*RecoveryCheckpoint, bool)`
-- `Manager.PublishSFUEvent(eventType string, session Session)` — async push an SFU
+**`frontend/.gitignore`** — `src/gen/` hinzufügen
 
-**State Machine Erweiterung in `statemachine/state.go`:**
-- Transition-Validierung: ungültige Übergänge abweisen + loggen (z.B. IDLE→CONNECTED ohne AUTHENTICATED)
-- `TransitionToConnected(sessionID string)` — atomare Transition AUTHENTICATED→CONNECTED + Session-ID setzen
+**`infrastructure/docker/nginx.conf`** — API-Proxy ergänzen:
+```nginx
+location /api/ {
+    proxy_pass http://control-server:8080/;
+}
+location /auth/ {
+    proxy_pass http://auth-service:8081/auth/;
+}
+location /vehicle/ws {
+    proxy_pass http://control-server:8080;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}
+```
 
-### BE-10 — Failure Detection & Recovery
-**`internal/controlserver/safety/detector.go`:**
-- `DeadmanWatchdog`: Timer-basiert; Reset() bei jedem Input; Ablauf → `EventDeadmanTimeout` auf Safety Bus
-- `ACKTimeoutWatcher`: pro Command ein Timer; kein ACK in Fenster → `EventACKTimeout` auf Safety Bus
-- `RecoveryManager`: Exponential Backoff (1s, 2s, 4s, 8s, max 30s) für Reconnect-Versuche
-- RECOVERING→SAFE_MODE-Fallback: wenn Validierung fehlschlägt
+**`cmd/control-server/main.go`** — `/api/emergency-stop` Endpunkt hinzufügen (Proxy zu safety-service), damit Frontend keine Cross-Origin-Requests braucht.
 
-**Integration in `transport/websocket.go`:**
-- `DeadmanWatchdog` starten bei CONTROL_ACTIVE
-- `DeadmanWatchdog.Reset()` bei jedem eingehenden Command
-- ACK-Timeout: nach Command-Empfang Timer starten, bei ACK canceln
+**Generierte Dateien:** `frontend/src/gen/common_pb.ts`, `control_pb.ts`, `safety_pb.ts`, `session_pb.ts`, `telemetry_pb.ts`
 
-### BE-12 — Operator Handover
-**`internal/controlserver/session/handover.go`:**
-- `HandoverManager.RequestHandover(fromOperatorID, toOperatorID string)`
-- OPERATOR STATE: ACTIVE_OPERATOR → HANDOVER_PENDING → ACTIVE_OPERATOR (neuer) oder Rollback
-- Exklusivitätsprüfung: max. 1 ACTIVE_OPERATOR
-- Handover-Token: `POST /auth/handover/token` via Auth Service aufrufen
-- Bei Abschluss: `Manager.PublishSFUEvent("OPERATOR_HANDOVER", session)`
+---
 
-### TEST-02 — Safety Test Suite
-Testfälle in `tests/unit/safety_test.go`:
+### FE-02 — WebSocket Client + State-Polling
 
-| Szenario | Erwartung |
-|----------|-----------|
-| Dead-man Timeout | SAFE_MODE + CONTROL_BLOCKED |
-| Emergency Stop | SAFE_MODE + CONTROL_BLOCKED |
-| WS Disconnect | SAFE_MODE + CONTROL_BLOCKED |
-| Command ACK Timeout | SAFE_MODE + CONTROL_BLOCKED |
-| No Active Operator | SAFE_MODE + CONTROL_BLOCKED |
-| Auth Invalidation | SAFE_MODE + CONTROL_BLOCKED |
-| Safety Bus Down | SAFE_MODE + CONTROL_BLOCKED |
-| MEDIA_FAILED | DEGRADED — **niemals SAFE_MODE** (Invariante 1) |
-| Recovery Checkpoint | SessionID + SafetyReason korrekt gespeichert |
-| Recovery → SAFE_MODE-Fallback | Wenn Validierung fehlschlägt → SAFE_MODE, nicht CONNECTED |
+**`frontend/src/lib/ws-client.ts`:**
+```typescript
+class WSClient {
+  connect(wsUrl: string, token: string): void
+  sendCommand(cmd: ControlCommand): Promise<number> // returns latency ms
+  disconnect(): void
+  onClose: (() => void) | null
+}
+```
+- Reconnect: Exponential Backoff (1s, 2s, 4s, 8s, max 30s) nach Channel Close
+- Latenz-Messung: `Date.now()` vor Send — `Date.now()` nach ACK-Empfang
+- CorrelationHeader: `session_id` aus Context + `event_id` via ULID (`ulidx` npm package)
+
+**`frontend/src/lib/api-client.ts`:**
+```typescript
+login(operatorId: string): Promise<string>          // → JWT token
+startSession(vehicleId: string, operatorId: string): Promise<string>  // → session_id
+getState(): Promise<SystemStateResponse>
+emergencyStop(sessionId: string, vehicleId: string): Promise<void>
+```
+
+**`frontend/src/hooks/useSystemState.ts`:**
+- Pollt `GET /api/state` alle 500ms
+- Gibt `{ system, control, media, operator, sessionId, latency }` zurück
+- Stoppt Polling bei `SAFE_MODE` (kein unnötiger Traffic)
+
+**`frontend/src/hooks/useSession.ts`:**
+- Verwaltet Login-Flow → JWT → WS-Connect → Session-Start
+- Exponential Backoff Reconnect nach SAFE_MODE
+- Stellt `sessionId`, `operatorRole`, `connect()`, `disconnect()` bereit
+
+---
+
+### FE-08 — SAFE MODE Overlay + Operator Ack Flow
+
+**`frontend/src/components/SafeModeOverlay.tsx`:**
+- Fullscreen-Overlay über allem (z-index hoch)
+- Zeigt Safety Reason aus letztem State
+- "Resume — Operator Acknowledgment" Button
+- Klick → `connect()` (Reconnect) → `startSession()` → CONNECTED
+- DEGRADED: kein Overlay, aber gelber Banner über Video Panel
+
+**App.tsx-Integration:**
+- `{systemState === 'SAFE_MODE' && <SafeModeOverlay />}` — overlay erscheint
+- Alle Steuerungselemente werden bei `systemState === 'SAFE_MODE'` disabled
+
+---
+
+### FE-04 — Safety Controls
+
+**`frontend/src/components/SafetyPanel.tsx`** (extrahiert aus App.tsx):
+
+**Emergency Stop:**
+- `POST /api/emergency-stop` mit `{session_id, vehicle_id, reason: "operator"}`
+- Button disabled wenn `systemState === 'SAFE_MODE'` (bereits in SAFE_MODE)
+- Button rot, Hover-State klar
+
+**Dead-man Switch:**
+- `mousedown` / Spacebar gedrückt → `active = true`
+- `mouseup` / Spacebar losgelassen → `active = false` → Server-Watchdog läuft ab → SAFE_MODE
+- Während aktiv: alle 500ms eine WS-Nachricht senden (reset deadman watchdog)
+- Visual: grüner Halo wenn aktiv, grau wenn inaktiv
+
+**`frontend/src/hooks/useDeadmanSwitch.ts`:**
+```typescript
+function useDeadmanSwitch(wsClient: WSClient | null, sessionId: string): {
+  isActive: boolean
+  bind: { onMouseDown, onMouseUp, onKeyDown, onKeyUp }
+}
+```
+- Interval-Timer (400ms) sendet Protobuf `COMMAND_TYPE_DEADMAN_HOLD` solange aktiv
+- Cleanup bei Unmount / SAFE_MODE-Eintritt
+
+---
+
+### FE-03 — Connection Status
+
+**`frontend/src/components/ConnectionPanel.tsx`** (extrahiert aus App.tsx):
+- SYSTEM STATE Badge (live, farbig)
+- Latenz in ms (aus WSClient ACK-Roundtrip, aktualisiert bei jedem Command)
+- Session-ID (gekürzt: erste 8 Zeichen + `…`)
+- Operator-Rolle (ACTIVE_OPERATOR / OBSERVER / STANDBY)
+- Verbindungsstatus-Dot (grün/gelb/rot)
+
+---
+
+## Infrastruktur-Änderungen
+
+| Datei | Änderung |
+|-------|---------|
+| `infrastructure/docker/nginx.conf` | `/api/` und `/auth/` Proxy-Routen ergänzen |
+| `infrastructure/docker/frontend.Dockerfile` | protoc + protoc-gen-es installieren + `npm run proto-gen` vor Build |
+| `frontend/package.json` | `@bufbuild/protobuf` + `@bufbuild/protoc-gen-es` + `ulidx` |
+| `frontend/.gitignore` | `src/gen/` ergänzen |
+| `cmd/control-server/main.go` | `/api/emergency-stop` Proxy-Endpunkt |
 
 ---
 
 ## Sprint-Ziel / Definition of Done
 
-- [ ] SYSTEM STATE Machine mit allen 7 Zuständen korrekt implementiert + Transition-Validierung
-- [ ] CONTROL, MEDIA, OPERATOR STATE implementiert und entkoppelt (keine Cross-Contamination)
-- [ ] Session Manager (GSA): Session-ID (ULID) bei CONNECTING→CONNECTED generiert
-- [ ] Recovery Checkpoint bei SAFE_MODE gespeichert, bei Recovery geladen
-- [ ] SFU Event-Push funktioniert (SESSION_CREATED, SESSION_SAFE_MODE, OPERATOR_HANDOVER)
-- [ ] Dead-man Switch Timeout → SAFE_MODE (automatisch, kein Operator-Input nötig)
-- [ ] Command ACK Timeout → SAFE_MODE
-- [ ] Exponential Backoff Reconnect implementiert
-- [ ] MEDIA_FAILED → DEGRADED, niemals SAFE_MODE (Invariante 1 verifiziert)
-- [ ] Safety Test Suite grün: alle 7 CRITICAL Trigger + Recovery Checkpoint + MEDIA Invariante
-- [ ] Operator-Ack Flow + Handover (HANDOVER_PENDING) funktionieren
+- [ ] Protobuf-Klassen werden build-time generiert (`ControlCommand`, `ControlAck`, `CorrelationHeader`)
+- [ ] Frontend loggt sich ein (JWT), verbindet WebSocket, startet Session
+- [ ] SYSTEM STATE aus `/api/state` wird live im UI angezeigt (Polling 500ms)
+- [ ] CONNECTED → State-Badge grün, Control-Elemente aktiv
+- [ ] Dead-man Switch (Spacebar/Button halten) resettet Watchdog — Loslassen → SAFE_MODE nach 2s
+- [ ] Emergency Stop → `POST /api/emergency-stop` → SAFE_MODE sofort
+- [ ] SAFE MODE Overlay erscheint, blockiert alle Steuerungselemente vollständig
+- [ ] "Resume / Operator Ack" reconnectet und startet neue Session
+- [ ] DEGRADED State: gelber Banner sichtbar, Steuerung bleibt möglich
+- [ ] Connection Panel zeigt Latenz, Session-ID, Operator-Rolle live
+- [ ] `docker-compose up --build` → alle Features im Browser nutzbar

@@ -127,7 +127,7 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) HandoverToken(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		CurrentToken string `json:"current_token"`
+		CurrentToken string `json:"current_token"` // optional: present in client-initiated flow
 		TargetID     string `json:"target_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -135,8 +135,18 @@ func (h *Handler) HandoverToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.parseToken(req.CurrentToken); err != nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	// Validate current_token when provided (client-initiated flow).
+	// Service-to-service calls from the Control Server omit it — trust is implied by
+	// network isolation within the Docker Compose stack.
+	if req.CurrentToken != "" {
+		if _, err := h.parseToken(req.CurrentToken); err != nil {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+	}
+
+	if req.TargetID == "" {
+		http.Error(w, "target_id required", http.StatusBadRequest)
 		return
 	}
 

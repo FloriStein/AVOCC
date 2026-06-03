@@ -1,5 +1,6 @@
 // Package transport implements the WebSocket Transport Layer (ADR-010).
-// JWT auth in handshake, Channel Close on CRITICAL events, Heartbeat 30s.
+// JWT auth in handshake, Channel Close on CRITICAL events, Heartbeat 30s,
+// DeadmanWatchdog and ACKTimeoutWatcher integrated (BE-10).
 package transport
 
 import (
@@ -8,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	csafety "avoc/internal/controlserver/safety"
+	"avoc/internal/controlserver/session"
 	"avoc/internal/controlserver/statemachine"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
@@ -25,14 +28,26 @@ type Claims struct {
 }
 
 type WSHandler struct {
-	jwtSecret []byte
-	sm        *statemachine.Machine
+	jwtSecret  []byte
+	sm         *statemachine.Machine
+	sessionMgr *session.Manager
+	deadman    *csafety.DeadmanWatchdog
+	ackWatcher *csafety.ACKTimeoutWatcher
 }
 
-func NewWSHandler(jwtSecret string, sm *statemachine.Machine) *WSHandler {
+func NewWSHandler(
+	jwtSecret string,
+	sm *statemachine.Machine,
+	sessionMgr *session.Manager,
+	deadman *csafety.DeadmanWatchdog,
+	ackWatcher *csafety.ACKTimeoutWatcher,
+) *WSHandler {
 	return &WSHandler{
-		jwtSecret: []byte(jwtSecret),
-		sm:        sm,
+		jwtSecret:  []byte(jwtSecret),
+		sm:         sm,
+		sessionMgr: sessionMgr,
+		deadman:    deadman,
+		ackWatcher: ackWatcher,
 	}
 }
 
@@ -79,11 +94,19 @@ func (h *WSHandler) heartbeat(conn *websocket.Conn) {
 
 func (h *WSHandler) readLoop(conn *websocket.Conn, claims *Claims) {
 	defer func() {
+		h.deadman.Stop()
 		sysState, _, _, _ := h.sm.Get()
 		if sysState != statemachine.StateSafeMode {
 			// WS disconnect → CRITICAL → SAFE_MODE + Channel Close (ADR-009/010)
 			h.sm.TransitionSystem(statemachine.StateSafeMode)
 			log.Printf("WebSocket disconnected: WS_DISCONNECT → SAFE_MODE (subject=%s)", claims.Subject)
+		}
+		// Save recovery checkpoint on SAFE_MODE entry
+		sys, ctrl, _, _ := h.sm.Get()
+		if sess, ok := h.sessionMgr.GetCurrentSession(); ok {
+			h.sessionMgr.SaveCheckpoint(string(sys), string(ctrl), "WS_DISCONNECT")
+			h.sessionMgr.PushSFUEvent("SESSION_SAFE_MODE")
+			log.Printf("[SESSION] checkpoint saved (session=%s)", sess.ID)
 		}
 	}()
 
@@ -100,12 +123,31 @@ func (h *WSHandler) readLoop(conn *websocket.Conn, claims *Claims) {
 
 		sysState, ctrlState, _, _ := h.sm.Get()
 		if sysState == statemachine.StateSafeMode || ctrlState == statemachine.ControlBlocked {
-			// Commands are dropped silently in SAFE_MODE (ADR-011)
+			// Commands dropped silently in SAFE_MODE (ADR-011)
 			continue
 		}
 
+		sess, hasSession := h.sessionMgr.GetCurrentSession()
+
+		// Reset dead-man watchdog on every command (BE-10).
+		// TODO BE-04: only reset on COMMAND_TYPE_DEADMAN_HOLD after protobuf parsing.
+		h.deadman.Reset()
+
+		if hasSession {
+			// Start ACK timeout window (ADR-010).
+			h.ackWatcher.CommandReceived(sess.ID, sess.VehicleID)
+		}
+
 		log.Printf("Control command received (%d bytes)", len(msg))
-		// TODO BE-04: route to Command Engine
+		// TODO BE-04: route to Command Engine (parse protobuf ControlCommand)
+
+		// Send immediate ACK — cancels the ACK timeout window.
+		// TODO BE-04: send proper ControlAck protobuf response.
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(`{"ack":true}`)); err != nil {
+			h.ackWatcher.CommandACKed()
+			return
+		}
+		h.ackWatcher.CommandACKed()
 	}
 }
 
@@ -118,7 +160,6 @@ func (h *WSHandler) validateJWT(tokenStr string) (*Claims, error) {
 }
 
 func extractToken(r *http.Request) string {
-	// Check Authorization header first, then query param for WS handshake
 	auth := r.Header.Get("Authorization")
 	if strings.HasPrefix(auth, "Bearer ") {
 		return strings.TrimPrefix(auth, "Bearer ")
