@@ -37,7 +37,7 @@ test:
 
 # Run safety test suite only
 test-safety:
-	go test ./internal/controlserver/safety/... -v -run Safety
+	go test ./tests/unit/... -v -run Safety
 
 # Run latency tests
 test-latency:
