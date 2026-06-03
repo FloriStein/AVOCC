@@ -1,7 +1,7 @@
 # Implementation Plan — Teleoperation System
 
 Stand: 2026-06-03
-Status: Bereit zur Implementierung (alle ADRs abgeschlossen — 16 ADRs)
+Status: Phase 1/2/3 abgeschlossen ✅ — Phase 4/5/6 offen (alle ADRs abgeschlossen — 16 ADRs)
 
 ---
 
@@ -217,7 +217,7 @@ Priorität: `Safety > Control > Telemetry` *(technische Durchsetzung: ADR-008 Fo
 
 ## 8. Implementierungsphasen
 
-### Phase 1 — Foundation & Contracts *(Sprint 1, aktiv)*
+### Phase 1 — Foundation & Contracts ✅ *(Sprint 1, abgeschlossen 2026-06-03)*
 
 **Ziel:** Lauffähiges Grundgerüst. `docker-compose up` bringt alle Core-Services hoch.
 
@@ -253,7 +253,7 @@ BE-11 ─────────────────────┘
 
 ---
 
-### Phase 2 — Safety & Failure Model
+### Phase 2 — Safety & Failure Model ✅ *(Sprint 2, abgeschlossen 2026-06-03)*
 
 **Ziel:** 4-Layer State Machine vollständig implementiert. SAFE MODE funktioniert deterministisch.
 
@@ -276,7 +276,7 @@ BE-11 ─────────────────────┘
 
 ---
 
-### Phase 3 — Frontend Core
+### Phase 3 — Frontend Core ✅ *(Sprint 3, abgeschlossen 2026-06-03)*
 
 **Ziel:** Frontend kommuniziert mit Backend, SAFE MODE sichtbar und bedienbar.
 

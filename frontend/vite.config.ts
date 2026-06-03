@@ -13,4 +13,12 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      '/ws': { target: 'ws://localhost:8080', ws: true, changeOrigin: true },
+      '/vehicle/ws': { target: 'ws://localhost:8080', ws: true, changeOrigin: true },
+      '/api': { target: 'http://localhost:8080', rewrite: (p) => p.replace(/^\/api/, ''), changeOrigin: true },
+      '/auth': { target: 'http://localhost:8081', changeOrigin: true },
+    },
+  },
 })

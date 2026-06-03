@@ -73,7 +73,13 @@ func (h *WSHandler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	h.sm.TransitionSystem(statemachine.StateConnecting)
+	// Recovery path: SAFE_MODE → RECOVERING → AUTHENTICATED (ADR-009/011)
+	// Normal path:   IDLE → CONNECTING → AUTHENTICATED
+	if current, _, _, _ := h.sm.Get(); current == statemachine.StateSafeMode {
+		h.sm.TransitionSystem(statemachine.StateRecovering)
+	} else {
+		h.sm.TransitionSystem(statemachine.StateConnecting)
+	}
 	h.sm.TransitionSystem(statemachine.StateAuthenticated)
 
 	log.Printf("WebSocket connected: subject=%s role=%s", claims.Subject, claims.Role)

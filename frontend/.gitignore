@@ -1,3 +1,6 @@
+# Generated proto TypeScript classes — never commit, regenerate via make proto-gen-ts
+src/gen/
+
 # Logs
 logs
 *.log

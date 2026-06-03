@@ -1,50 +1,91 @@
-# React + TypeScript + Vite
+# AVOC Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 18 + TypeScript + Vite — Teleoperation Control Center UI.
 
-Currently, two official plugins are available:
+Teil des AVOC-Systems. Vollständige Projektdokumentation: [../README.md](../README.md)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+---
 
-## Expanding the ESLint configuration
+## Starten
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
-
-- Configure the top-level `parserOptions` property like this:
-
-```js
-export default tseslint.config({
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+**Im Docker-Stack (empfohlen):**
+```bash
+# Aus dem Repo-Root:
+make up
+# → http://localhost:3000
 ```
 
-- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
-- Optionally add `...tseslint.configs.stylisticTypeChecked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
-
-```js
-// eslint.config.js
-import react from 'eslint-plugin-react'
-
-export default tseslint.config({
-  // Set the react version
-  settings: { react: { version: '18.3' } },
-  plugins: {
-    // Add the react plugin
-    react,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended rules
-    ...react.configs.recommended.rules,
-    ...react.configs['jsx-runtime'].rules,
-  },
-})
+**Lokal mit Hot-Reload:**
+```bash
+npm install
+npm run dev
+# → http://localhost:5173
+# Vite proxied /api/ → :8080, /auth/ → :8081, /ws → :8080
+# Voraussetzung: docker-compose up läuft für die Backend-Services
 ```
+
+---
+
+## Proto-Code generieren
+
+TypeScript-Klassen werden build-time aus `../proto/*.proto` generiert:
+
+```bash
+# Via Docker (kein lokales protoc nötig):
+make proto-gen-ts    # aus Repo-Root
+
+# Oder lokal (protoc + protoc-gen-es muss installiert sein):
+npm run proto-gen
+```
+
+Generierte Dateien landen in `src/gen/` (gitignored).
+
+---
+
+## Build
+
+```bash
+npm run build   # TypeScript-Kompilierung + Vite Build → dist/
+npm run lint    # ESLint
+```
+
+---
+
+## Struktur
+
+```
+src/
+├── components/
+│   ├── ConnectionPanel.tsx   # Live-Latenz, State-Badge, Session-ID, Operator-Rolle
+│   ├── SafeModeOverlay.tsx   # Fullscreen-Block bei SAFE_MODE, Resume-Button
+│   └── SafetyPanel.tsx       # Emergency Stop + Dead-man Switch
+├── hooks/
+│   ├── useDeadmanSwitch.ts   # Spacebar/Mousedown → DEADMAN_HOLD Commands
+│   ├── useSession.ts         # Login, WS-Connect, Session-Start, Reconnect
+│   └── useSystemState.ts     # Polling GET /api/state (500ms)
+├── lib/
+│   ├── api-client.ts         # HTTP-Client (login, startSession, emergencyStop)
+│   └── ws-client.ts          # WebSocket-Client mit Latenz-Messung
+└── gen/                      # Protobuf-generiert — gitignored
+    ├── common_pb.ts
+    ├── control_pb.ts
+    └── ...
+```
+
+---
+
+## Tech-Stack (ADR-013)
+
+| Bereich | Technologie |
+|---------|------------|
+| Framework | React 18 |
+| Sprache | TypeScript |
+| Build Tool | Vite |
+| Styling | Tailwind CSS v4 |
+| Protobuf | @bufbuild/protobuf + @bufbuild/protoc-gen-es |
+| ULID | ulidx |
+
+**Sprint-3-Einschränkungen (werden in Sprint 4 behoben):**
+- State-Sync via Polling (500ms) — WebSocket-State-Push kommt mit BE-04
+- Server antwortet auf ControlCommand mit `{"ack":true}` (kein Protobuf ControlAck bis BE-04)
+- Control Panel (Joystick/Keyboard/Gamepad) disabled bis BE-04 fertig

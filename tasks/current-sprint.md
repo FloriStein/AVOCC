@@ -3,6 +3,7 @@
 Ziel: Frontend kommuniziert live mit Backend. SYSTEM STATE sichtbar. SAFE MODE blockiert Steuerung. Emergency Stop und Dead-man Switch funktionieren.
 
 Datum: 2026-06-03
+Status: ✅ Abgeschlossen
 Vorgänger: Sprint 2 ✅ (Safety & Failure Model — 19/19 Tests grün, alle CRITICAL Trigger verifiziert)
 
 ---
@@ -30,11 +31,11 @@ Vorgänger: Sprint 2 ✅ (Safety & Failure Model — 19/19 Tests grün, alle CRI
 
 | ID | Task | Typ | Status | Notizen |
 |----|------|-----|--------|---------|
-| FE-09 | Frontend Protobuf Adapter + Build-Pipeline | M | 🔲 Todo | ADR-012b/013/016; `@bufbuild/protobuf` + `@bufbuild/protoc-gen-es`; Dockerfile anpassen; nginx API-Proxy; gen in `frontend/src/gen/` (gitignored) |
-| FE-02 | WebSocket Client + State-Polling | M | 🔲 Todo | ADR-008/010/011/012b; `src/lib/ws-client.ts`; JWT-Auth; Reconnect mit Exponential Backoff; Polling `GET /api/state`; `useSystemState` Hook |
-| FE-08 | SAFE MODE Overlay + Operator Ack Flow | M | 🔲 Todo | ADR-009/011/015; Overlay blockiert alle Inputs; Resume-Flow (reconnect + `/api/session/start`); DEGRADED-Banner |
-| FE-04 | Safety Controls — Emergency Stop + Dead-man Switch | M | 🔲 Todo | ADR-009/015; E-Stop → `POST /api/emergency-stop`; Dead-man via Spacebar/Mousedown (hält WS-Reset aktiv); Operator-Ack vor erster Aktivierung |
-| FE-03 | Connection Status — Live-Anzeige | S | 🔲 Todo | ADR-016; Latenz (JSON ACK-Roundtrip), SYSTEM STATE Badge, Session-ID, Operator-Rolle |
+| FE-09 | Frontend Protobuf Adapter + Build-Pipeline | M | ✅ Done | ADR-012b/013/016; `@bufbuild/protobuf` + `@bufbuild/protoc-gen-es`; Dockerfile anpassen; nginx API-Proxy; gen in `frontend/src/gen/` (gitignored) |
+| FE-02 | WebSocket Client + State-Polling | M | ✅ Done | ADR-008/010/011/012b; `src/lib/ws-client.ts`; JWT-Auth; Reconnect mit Exponential Backoff; Polling `GET /api/state`; `useSystemState` Hook |
+| FE-08 | SAFE MODE Overlay + Operator Ack Flow | M | ✅ Done | ADR-009/011/015; Overlay blockiert alle Inputs; Resume-Flow (reconnect + `/api/session/start`); DEGRADED-Banner |
+| FE-04 | Safety Controls — Emergency Stop + Dead-man Switch | M | ✅ Done | ADR-009/015; E-Stop → `POST /api/emergency-stop`; Dead-man via Spacebar/Mousedown (hält WS-Reset aktiv); Operator-Ack vor erster Aktivierung |
+| FE-03 | Connection Status — Live-Anzeige | S | ✅ Done | ADR-016; Latenz (JSON ACK-Roundtrip), SYSTEM STATE Badge, Session-ID, Operator-Rolle |
 
 ---
 

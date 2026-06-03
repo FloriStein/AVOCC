@@ -117,6 +117,18 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
+	// Emergency Stop proxy — frontend calls this to avoid cross-origin issues (ADR-009)
+	mux.HandleFunc("POST /emergency-stop", func(w http.ResponseWriter, r *http.Request) {
+		sess, _ := sessionMgr.GetCurrentSession()
+		safetyPub.TriggerEmergencyStop(sess.ID, sess.VehicleID, "operator emergency stop")
+		sm.TransitionSystem(statemachine.StateSafeMode)
+		if sess.ID != "" {
+			sessionMgr.SaveCheckpoint("SAFE_MODE", "CONTROL_BLOCKED", "EMERGENCY_STOP")
+			sessionMgr.PushSFUEvent("SESSION_SAFE_MODE")
+		}
+		w.WriteHeader(http.StatusAccepted)
+	})
+
 	// State + Health
 	mux.HandleFunc("GET /state", func(w http.ResponseWriter, _ *http.Request) {
 		sys, ctrl, media, op := sm.Get()

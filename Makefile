@@ -16,6 +16,17 @@ proto-gen:
 		proto/*.proto
 	@echo "Proto generation done."
 
+# Generate TypeScript proto code (local dev — uses Docker to avoid local protoc requirement)
+proto-gen-ts:
+	docker run --rm \
+		-v $(PWD):/app -w /app/frontend \
+		--entrypoint sh node:22-alpine -c \
+		"apk add --no-cache protobuf && npm ci && \
+		mkdir -p src/gen && \
+		PATH=\$$PATH:./node_modules/.bin protoc \
+			--proto_path=../proto --es_out=src/gen --es_opt=target=ts ../proto/*.proto && \
+		echo 'TypeScript proto generation done.'"
+
 # Build all Go services
 build:
 	@for svc in control-server auth-service safety-service telemetry-service webrtc-sfu; do \
