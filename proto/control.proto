@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package avoc.control.v1;
+
+import "common.proto";
+
+option go_package = "avoc/gen/go/control/v1;controlv1";
+
+enum CommandType {
+  COMMAND_TYPE_UNSPECIFIED    = 0;
+  COMMAND_TYPE_STEER          = 1;
+  COMMAND_TYPE_THROTTLE       = 2;
+  COMMAND_TYPE_BRAKE          = 3;
+  COMMAND_TYPE_SPEED          = 4;
+  COMMAND_TYPE_EMERGENCY_STOP = 5;
+  COMMAND_TYPE_DEADMAN_HOLD   = 6;
+  COMMAND_TYPE_DEADMAN_RELEASE = 7;
+}
+
+// ControlCommand is sent from Frontend to Control Server via WebSocket (sync ACK).
+message ControlCommand {
+  avoc.common.v1.CorrelationHeader header  = 1;
+  CommandType                       type   = 2;
+  float                             value  = 3; // normalized [-1.0, 1.0] or [0.0, 1.0]
+}
+
+// ControlAck is the synchronous response from Control Server to Frontend (<100ms target).
+message ControlAck {
+  avoc.common.v1.CorrelationHeader header    = 1;
+  bool                              success   = 2;
+  string                            error_msg = 3;
+}

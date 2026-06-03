@@ -1,0 +1,28 @@
+# Generated proto code — never commit, always regenerate via `make proto-gen`
+gen/
+
+# Go build artifacts
+bin/
+
+# Frontend build
+frontend/dist/
+frontend/node_modules/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go test cache
+*.test
+*.out

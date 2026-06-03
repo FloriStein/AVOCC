@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package avoc.safety.v1;
+
+import "common.proto";
+
+option go_package = "avoc/gen/go/safety/v1;safetyv1";
+
+// SafetyEventType maps to CRITICAL triggers in the Failure Model (ADR-009).
+// MEDIA_* events are intentionally absent — they never trigger SAFE_MODE.
+enum SafetyEventType {
+  SAFETY_EVENT_TYPE_UNSPECIFIED     = 0;
+  SAFETY_EVENT_TYPE_EMERGENCY_STOP  = 1;
+  SAFETY_EVENT_TYPE_DEADMAN_TIMEOUT = 2;
+  SAFETY_EVENT_TYPE_ACK_TIMEOUT     = 3;
+  SAFETY_EVENT_TYPE_WS_DISCONNECT   = 4;
+  SAFETY_EVENT_TYPE_NO_OPERATOR     = 5;
+  SAFETY_EVENT_TYPE_AUTH_INVALID    = 6;
+  SAFETY_EVENT_TYPE_SAFETY_BUS_DOWN = 7;
+}
+
+// SafetyEvent is published on the Safety Event Bus (fire-and-forget, async).
+message SafetyEvent {
+  avoc.common.v1.CorrelationHeader header = 1;
+  SafetyEventType                   type  = 2;
+  string                            reason = 3;
+}
+
+// SafetyState reflects current SYSTEM STATE safety condition.
+message SafetyState {
+  avoc.common.v1.CorrelationHeader header     = 1;
+  bool                              safe_mode  = 2;
+  SafetyEventType                   last_event = 3;
+}

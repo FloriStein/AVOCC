@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package avoc.session.v1;
+
+import "common.proto";
+
+option go_package = "avoc/gen/go/session/v1;sessionv1";
+
+// SessionEventType maps to SFU Event Stream (ADR-015).
+// Control Server pushes these to SFU after every Control Session state change.
+enum SessionEventType {
+  SESSION_EVENT_TYPE_UNSPECIFIED       = 0;
+  SESSION_EVENT_TYPE_CREATED           = 1;
+  SESSION_EVENT_TYPE_OPERATOR_ASSIGNED = 2;
+  SESSION_EVENT_TYPE_OPERATOR_HANDOVER = 3;
+  SESSION_EVENT_TYPE_DEGRADED          = 4;
+  SESSION_EVENT_TYPE_SAFE_MODE         = 5;
+  SESSION_EVENT_TYPE_ENDED             = 6;
+}
+
+// SessionEvent is pushed from Control Server to SFU (async).
+// SFU consumes but never interprets — Dumb Media Router with State Subscription.
+message SessionEvent {
+  avoc.common.v1.CorrelationHeader header             = 1;
+  SessionEventType                  type              = 2;
+  string                            target_operator_id = 3; // used for OPERATOR_HANDOVER
+}
+
+// RecordingEntry is the base unit for session recording (ADR-005).
+// session_id in header is the root key for all recording data.
+message RecordingEntry {
+  avoc.common.v1.CorrelationHeader header     = 1;
+  string                            entry_type = 2; // "control", "safety", "state", "telemetry"
+  bytes                             payload    = 3; // serialized domain message
+}

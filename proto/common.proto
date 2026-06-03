@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package avoc.common.v1;
+
+option go_package = "avoc/gen/go/common/v1;commonv1";
+
+// CorrelationHeader is included in every message across all channels.
+// Enables full session reconstruction for audit, debugging and incident analysis.
+message CorrelationHeader {
+  string session_id  = 1; // ULID — Control Session root anchor (survives SAFE_MODE)
+  string event_id    = 2; // ULID — per message/command/frame
+  string vehicle_id  = 3;
+  string operator_id = 4;
+  int64  timestamp   = 5; // Unix milliseconds
+}

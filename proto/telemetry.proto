@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package avoc.telemetry.v1;
+
+import "common.proto";
+
+option go_package = "avoc/gen/go/telemetry/v1;telemetryv1";
+
+// TelemetryEvent is published via MQTT (async, fire-and-forget).
+// A MQTT disconnect triggers DEGRADED — not SAFE_MODE (ADR-009).
+message TelemetryEvent {
+  avoc.common.v1.CorrelationHeader header      = 1;
+  double                            speed_kmh   = 2;
+  double                            battery_pct = 3;
+  double                            latitude    = 4;
+  double                            longitude   = 5;
+  string                            status      = 6;
+}
