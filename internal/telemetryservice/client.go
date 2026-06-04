@@ -4,15 +4,17 @@
 package telemetryservice
 
 import (
-	"log"
 	"sync"
 	"time"
 
 	telemetryv1 "avoc/gen/go/telemetry/v1"
+	"avoc/pkg/logger"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"google.golang.org/protobuf/proto"
 )
+
+var svcLog = logger.New("telemetry-service")
 
 const (
 	topicVehicleTelemetry = "vehicle/+/telemetry"
@@ -42,11 +44,11 @@ func (c *Client) Connect() error {
 		SetAutoReconnect(true).
 		SetConnectRetryInterval(reconnectDelay).
 		SetOnConnectHandler(func(_ mqtt.Client) {
-			log.Printf("[MQTT] connected to %s", c.broker)
+			svcLog.Info("MQTT connected", "broker", c.broker)
 			c.subscribe()
 		}).
 		SetConnectionLostHandler(func(_ mqtt.Client, err error) {
-			log.Printf("[MQTT] connection lost: %v", err)
+			svcLog.Warn("MQTT connection lost", "error", err)
 		})
 
 	c.client = mqtt.NewClient(opts)
@@ -59,16 +61,16 @@ func (c *Client) subscribe() {
 	token := c.client.Subscribe(topicVehicleTelemetry, 1, c.handleMessage)
 	token.Wait()
 	if err := token.Error(); err != nil {
-		log.Printf("[MQTT] subscribe error: %v", err)
+		svcLog.Error("MQTT subscribe error", "error", err)
 		return
 	}
-	log.Printf("[MQTT] subscribed to %s", topicVehicleTelemetry)
+	svcLog.Info("MQTT subscribed", "topic", topicVehicleTelemetry)
 }
 
 func (c *Client) handleMessage(_ mqtt.Client, msg mqtt.Message) {
 	event := &telemetryv1.TelemetryEvent{}
 	if err := proto.Unmarshal(msg.Payload(), event); err != nil {
-		log.Printf("[MQTT] parse error on topic %s: %v", msg.Topic(), err)
+		svcLog.Warn("MQTT parse error", "topic", msg.Topic(), "error", err)
 		return
 	}
 
@@ -84,8 +86,10 @@ func (c *Client) handleMessage(_ mqtt.Client, msg mqtt.Message) {
 	c.latest[vehicleID] = event
 	c.mu.Unlock()
 
-	log.Printf("[MQTT] telemetry: vehicle=%s speed=%.1f km/h battery=%.0f%%",
-		vehicleID, event.SpeedKmh, event.BatteryPct)
+	svcLog.Debug("telemetry received",
+		"vehicle_id", vehicleID,
+		"speed_kmh", event.SpeedKmh,
+		"battery_pct", event.BatteryPct)
 }
 
 // GetLatest returns the most recent TelemetryEvent for the given vehicle.

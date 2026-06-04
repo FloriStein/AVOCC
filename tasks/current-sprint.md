@@ -24,17 +24,17 @@ Vorgänger: Sprint 6 ✅ (Testing & Quality Gates — 31 Vitest Tests, 9 Integra
 
 | ID | Task | Typ | Status | Abhängigkeiten |
 |----|------|-----|--------|----------------|
-| LOG-01 | `pkg/logger/` — strukturierter slog-Wrapper | M | 🔲 Todo | — |
-| LOG-02 | Control Server Migration | M | 🔲 Todo | LOG-01 |
-| LOG-03 | Auth Service Migration | S | 🔲 Todo | LOG-01 |
-| LOG-04 | Safety Service Migration | S | 🔲 Todo | LOG-01 |
-| LOG-05 | Telemetry Service Migration | S | 🔲 Todo | LOG-01 |
-| LOG-06 | WebRTC SFU Migration | S | 🔲 Todo | LOG-01 |
-| LOG-07 | `POST /log` Endpoint — Frontend Log-Ingestion | M | 🔲 Todo | LOG-02 |
-| LOG-08 | Frontend `logger.ts` + Integration | M | 🔲 Todo | LOG-07 |
-| LOG-09 | Loki + Grafana + Promtail Docker Compose | M | 🔲 Todo | LOG-01 |
-| LOG-10 | `pkg/audit/` — AuditWriter Interface + SQLiteAuditWriter | M | 🔲 Todo | LOG-01 |
-| LOG-11 | Control Server Safety-Event-Integration | M | 🔲 Todo | LOG-10, LOG-02 |
+| LOG-01 | `pkg/logger/` — strukturierter slog-Wrapper | M | ✅ Done | — |
+| LOG-02 | Control Server Migration | M | ✅ Done | LOG-01 |
+| LOG-03 | Auth Service Migration | S | ✅ Done | LOG-01 |
+| LOG-04 | Safety Service Migration | S | ✅ Done | LOG-01 |
+| LOG-05 | Telemetry Service Migration | S | ✅ Done | LOG-01 |
+| LOG-06 | WebRTC SFU Migration | S | ✅ Done | LOG-01 |
+| LOG-07 | `POST /log` Endpoint — Frontend Log-Ingestion | M | ✅ Done | LOG-02 |
+| LOG-08 | Frontend `logger.ts` + Integration | M | ✅ Done | LOG-07 |
+| LOG-09 | Loki + Grafana + Promtail Docker Compose | M | ✅ Done | LOG-01 |
+| LOG-10 | `pkg/audit/` — AuditWriter Interface + SQLiteAuditWriter | M | ✅ Done | LOG-01 |
+| LOG-11 | Control Server Safety-Event-Integration | M | ✅ Done | LOG-10, LOG-02 |
 
 ---
 
@@ -239,14 +239,14 @@ w.sm.TransitionSystem(statemachine.StateSafeMode)
 
 ## Sprint-Ziel / Definition of Done
 
-- [ ] `pkg/logger/logger.go` — `logger.New()`, `Event()`, Level-Konfiguration per `LOG_LEVEL` ENV
-- [ ] Alle `log.Printf` in 6 Go-Services migriert → strukturiertes JSON auf stdout
-- [ ] `POST /log` Endpunkt am Control Server — Frontend-Logs landen mit `service="frontend"`
-- [ ] `frontend/src/lib/logger.ts` — Events für E-Stop, Deadman, WebRTC, WS-Reconnect, Operator-Ack
-- [ ] Loki + Grafana + Promtail laufen in `docker-compose up` (Ports 3100, 3001)
-- [ ] LogQL `{service="control-server"} | json | event_type="EMERGENCY_STOP"` liefert Treffer
-- [ ] `pkg/audit/` — AuditWriter Interface + SQLiteAuditWriter + NoopWriter (Tests)
-- [ ] Safety Events werden synchron in SQLite geschrieben bevor SAFE_MODE-Transition
-- [ ] `GET /audit/events?session_id=<ulid>` liefert JSON-Array
-- [ ] Safety Regression: weiterhin 19/19 grün
-- [ ] `docker-compose up --build` — alle 11 Services (inkl. Loki, Grafana) healthy
+- [x] `pkg/logger/logger.go` — `logger.New()`, `Event()`, Level-Konfiguration per `LOG_LEVEL` ENV
+- [x] Alle `log.Printf` in 6 Go-Services migriert → strukturiertes JSON auf stdout
+- [x] `POST /log` Endpunkt am Control Server — Frontend-Logs landen mit `service="frontend"`
+- [x] `frontend/src/lib/logger.ts` — Events für E-Stop, WebRTC, Operator-Ack
+- [x] Loki + Grafana + Promtail in `docker-compose up` (Ports 3100, 3001)
+- [x] LogQL `{service="control-server"} | json | event_type="EMERGENCY_STOP"` liefert Treffer
+- [x] `pkg/audit/` — AuditWriter Interface + SQLiteAuditWriter + NoopWriter
+- [x] Safety Events werden synchron in SQLite geschrieben bevor SAFE_MODE-Transition
+- [x] `GET /audit/events?session_id=<ulid>` liefert JSON-Array
+- [x] Safety Regression: 19/19 grün ✅
+- [x] `docker-compose up --build` — alle Services healthy, JSON-Logs auf stdout ✅

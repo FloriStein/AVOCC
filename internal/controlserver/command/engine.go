@@ -4,37 +4,41 @@
 package command
 
 import (
-	"log"
 	"sync"
 	"time"
 
 	commonv1 "avoc/gen/go/common/v1"
 	controlv1 "avoc/gen/go/control/v1"
-	csafety "avoc/internal/controlserver/safety"
+	"avoc/internal/controlserver/safety"
 	"avoc/internal/controlserver/session"
 	"avoc/internal/controlserver/statemachine"
 	"avoc/internal/safetyservice"
+	"avoc/pkg/audit"
+	"avoc/pkg/logger"
 	"avoc/pkg/ulid"
 
 	"google.golang.org/protobuf/proto"
 )
 
+var svcLog = logger.New("control-server")
+
 const maxCommandsPerSecond = 100
 
 // Engine routes parsed ControlCommands to the correct handler (ADR-007).
 type Engine struct {
-	sm         *statemachine.Machine
-	safetyPub  csafety.Publisher
-	sessionMgr *session.Manager
-	deadman    *csafety.DeadmanWatchdog
-	limiter    *tokenBucket
+	sm          *statemachine.Machine
+	safetyPub   safety.Publisher
+	sessionMgr  *session.Manager
+	deadman     *safety.DeadmanWatchdog
+	auditWriter audit.AuditWriter
+	limiter     *tokenBucket
 }
 
 func NewEngine(
 	sm *statemachine.Machine,
-	safetyPub csafety.Publisher,
+	safetyPub safety.Publisher,
 	sessionMgr *session.Manager,
-	deadman *csafety.DeadmanWatchdog,
+	deadman *safety.DeadmanWatchdog,
 ) *Engine {
 	return &Engine{
 		sm:         sm,
@@ -45,12 +49,18 @@ func NewEngine(
 	}
 }
 
+// WithAuditWriter sets the audit writer for EMERGENCY_STOP persistence (ADR-018).
+func (e *Engine) WithAuditWriter(aw audit.AuditWriter) *Engine {
+	e.auditWriter = aw
+	return e
+}
+
 // Handle parses rawMsg as a Protobuf ControlCommand, routes it, and returns
 // a serialised ControlAck. Malformed messages yield a failed ACK, not a panic.
 func (e *Engine) Handle(rawMsg []byte, sess session.Session) ([]byte, error) {
 	cmd := &controlv1.ControlCommand{}
 	if err := proto.Unmarshal(rawMsg, cmd); err != nil {
-		log.Printf("[CMD] parse error: %v", err)
+		svcLog.Warn("command parse error", "error", err)
 		return e.ack(sess, "", false, "invalid protobuf message")
 	}
 
@@ -65,13 +75,33 @@ func (e *Engine) Handle(rawMsg []byte, sess session.Session) ([]byte, error) {
 
 	switch cmd.Type {
 	case controlv1.CommandType_COMMAND_TYPE_DEADMAN_HOLD:
-		// Proper DEADMAN_HOLD recognition — replaces the Sprint-3 "reset on every message" workaround.
 		e.deadman.Reset()
 
 	case controlv1.CommandType_COMMAND_TYPE_DEADMAN_RELEASE:
 		// Intentionally do NOT reset — watchdog fires after timeout → SAFE_MODE.
 
 	case controlv1.CommandType_COMMAND_TYPE_EMERGENCY_STOP:
+		svcLog.Event(logger.EventEmergencyStop, "EMERGENCY_STOP received → SAFE_MODE",
+			"session_id", sess.ID, "vehicle_id", sess.VehicleID, "operator_id", sess.OperatorID)
+
+		// Write to audit store BEFORE state transition (ADR-018)
+		if e.auditWriter != nil {
+			sys, ctrl, _, _ := e.sm.Get()
+			if err := e.auditWriter.WriteSync(audit.SafetyAuditEvent{
+				EventID:     ulid.Generate(),
+				SessionID:   sess.ID,
+				VehicleID:   sess.VehicleID,
+				OperatorID:  sess.OperatorID,
+				EventType:   logger.EventEmergencyStop,
+				Reason:      "operator EMERGENCY_STOP command",
+				SystemState: string(sys),
+				CtrlState:   string(ctrl),
+				Timestamp:   time.Now(),
+			}); err != nil {
+				svcLog.Error("audit write failed — proceeding to SAFE_MODE", "error", err)
+			}
+		}
+
 		e.sm.TransitionSystem(statemachine.StateSafeMode)
 		e.safetyPub.PublishEvent(safetyservice.SafetyEvent{
 			SessionID: sess.ID,
@@ -80,17 +110,16 @@ func (e *Engine) Handle(rawMsg []byte, sess session.Session) ([]byte, error) {
 			Reason:    "operator EMERGENCY_STOP command",
 			Timestamp: time.Now(),
 		})
-		log.Printf("[CMD] EMERGENCY_STOP → SAFE_MODE (session=%s)", sess.ID)
 
 	case controlv1.CommandType_COMMAND_TYPE_STEER,
 		controlv1.CommandType_COMMAND_TYPE_THROTTLE,
 		controlv1.CommandType_COMMAND_TYPE_BRAKE,
 		controlv1.CommandType_COMMAND_TYPE_SPEED:
-		// TODO Sprint 5: forward command to vehicle via vehicle connection.
-		log.Printf("[CMD] %s value=%.2f (session=%s)", cmd.Type, cmd.Value, sess.ID)
+		svcLog.Debug("control command",
+			"type", cmd.Type, "value", cmd.Value, "session_id", sess.ID)
 
 	default:
-		log.Printf("[CMD] unhandled command type %d", cmd.Type)
+		svcLog.Warn("unhandled command type", "type", cmd.Type)
 	}
 
 	return e.ack(sess, eventID, true, "")

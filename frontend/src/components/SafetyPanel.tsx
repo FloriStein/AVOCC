@@ -4,6 +4,7 @@
 
 import { emergencyStop } from '@/lib/api-client'
 import { useDeadmanSwitch } from '@/hooks/useDeadmanSwitch'
+import { FE_EMERGENCY_STOP, logEvent } from '@/lib/logger'
 import type { WSClient } from '@/lib/ws-client'
 
 interface Props {
@@ -29,6 +30,8 @@ export function SafetyPanel({ systemState, sessionId, wsClient }: Props) {
 
   const handleEmergencyStop = async () => {
     if (isSafeMode) return
+    logEvent(FE_EMERGENCY_STOP, 'Emergency Stop clicked',
+      { sessionId: sessionId ?? '', vehicleId: VEHICLE_ID, operatorId: OPERATOR_ID })
     try {
       await emergencyStop(sessionId ?? '', VEHICLE_ID)
     } catch {

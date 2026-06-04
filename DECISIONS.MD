@@ -28,7 +28,7 @@
 
 | Thema | Blockiert | Referenz |
 |-------|-----------|----------|
-| Prioritätsmodell technisch (getrennte Channels vs. Header-Flag) | TEST-05 / Sprint 6 | ADR-008 Folge — BE-04 nutzt Publisher-Pattern; explizite Channel-Trennung noch offen |
-| Session Recording Storage (DB/Files/Object Storage) | nach Sprint 6 | ADR-005 Folge — MemoryRecorder seit Sprint 4 als Platzhalter aktiv; Storage-ADR noch ausstehend |
+| Prioritätsmodell technisch (getrennte Channels vs. Header-Flag) | offen | ADR-008 Folge — BE-04 nutzt Publisher-Pattern; explizite Channel-Trennung noch offen |
+| Session Recording Storage (DB/Files/Object Storage) | offen | ADR-005 Folge — MemoryRecorder seit Sprint 4 als Platzhalter aktiv; Storage-ADR ausstehend |
 | DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge — Safety Event Bus als DDS-Drop-in implementiert |
 | Backup-Strategie Audit Store (SQLite Volume) | nach LOG-10 | ADR-019 möglich — SQLite-Volume-Sicherung, Replikation für Produktivbetrieb |

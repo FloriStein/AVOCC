@@ -3,7 +3,7 @@
 Lifecycle: backlog → sprint → done
 Typen: S (<30 Min), M (30–180 Min), L (Architektur, ADR-pflichtig)
 
-Stand: 2026-06-03 — aktualisiert nach Sprint 1/2/3/4/5 + ADR-017 (Logging)
+Stand: 2026-06-04 — aktualisiert nach Sprint 1/2/3/4/5/6 + ADR-017/018 (Logging & Audit Trail)
 
 ---
 
@@ -69,21 +69,21 @@ Stand: 2026-06-03 — aktualisiert nach Sprint 1/2/3/4/5 + ADR-017 (Logging)
 
 ---
 
-## EPIC: Logging (ADR-017)
+## EPIC: Logging (ADR-017/018)
 
-| ID | Task | Typ | Abhängigkeiten | Notizen |
-|----|------|-----|----------------|---------|
-| LOG-01 | `pkg/logger/` — strukturierter slog-Wrapper (shared) | M | — | `log/slog` (Go stdlib, keine ext. Dep.); JSON-Handler; `Event()`-API mit session_id, event_id, event_type; Level-Konfiguration per ENV |
-| LOG-02 | Control Server Migration — `log.Printf` → strukturierter Logger | M | LOG-01 | Alle `[CMD]`, `[DEADMAN]`, `[STATE]`, `[SESSION]`, `[RECORDING]` Calls migrieren; Event-Type-Enum aus ADR-017 |
-| LOG-03 | Auth Service Migration | S | LOG-01 | Wenige Log-Calls; Login, Token-Ausstellung, Fehler |
-| LOG-04 | Safety Service Migration | S | LOG-01 | EmergencyStop, Bus-Events |
-| LOG-05 | Telemetry Service Migration | S | LOG-01 | MQTT connect/disconnect, Telemetry-Events |
-| LOG-06 | WebRTC SFU Migration | S | LOG-01 | Session-Events, ICE-State-Changes |
-| LOG-07 | `POST /log` Endpoint — Frontend Log-Ingestion | M | LOG-02 | Control Server empfängt strukturierte Frontend-Logs; validiert session_id; schreibt mit `service: "frontend"` |
-| LOG-08 | Frontend `logger.ts` + Integration | M | LOG-07 | `src/lib/logger.ts` Utility; alle relevanten FE-Events (Emergency Stop, Deadman, WebRTC, WS-Reconnect, Operator-Ack); batching optional |
-| LOG-09 | Loki + Grafana + Promtail Docker Compose | M | LOG-01 | `infrastructure/loki/`, `infrastructure/promtail/`, `infrastructure/grafana/`; Docker-Label-Discovery; JSON-Pipeline; provisioned Datasource + AVOC-Dashboard |
-| LOG-10 | `pkg/audit/` — AuditWriter Interface + SQLiteAuditWriter (ADR-018) | M | LOG-01 | `modernc.org/sqlite` (pure Go, kein CGO); WAL-Modus; `WriteSync()` + fsync; NoopWriter für Tests; Schema: `audit_events` Tabelle mit Indizes auf session_id, event_type, timestamp |
-| LOG-11 | Control Server Safety-Event-Integration — AuditWriter auf kritischem Pfad | M | LOG-10, LOG-02 | Alle Safety-Trigger in `detector.go`, `engine.go`, `websocket.go` schreiben synchron via `AuditWriter.WriteSync()` **vor** SAFE_MODE-Transition; `POST /audit/events` Query-Endpoint |
+| ID | Task | Typ | Status | Ergebnis |
+|----|------|-----|--------|----------|
+| LOG-01 | `pkg/logger/` — slog-Wrapper + event_types.go | M | ✅ Sprint 7 | `logger.New(service)`, `Event()`, JSON stdout, `LOG_LEVEL` ENV |
+| LOG-02 | Control Server Migration | M | ✅ Sprint 7 | statemachine, safety, command, transport, session, vehicleconnection migriert |
+| LOG-03 | Auth Service Migration | S | ✅ Sprint 7 | cmd/auth-service/main.go — structured JSON |
+| LOG-04 | Safety Service Migration | S | ✅ Sprint 7 | cmd/safety-service/main.go — Bus-Events via Event() |
+| LOG-05 | Telemetry Service Migration | S | ✅ Sprint 7 | telemetryservice/client.go — MQTT-Events strukturiert |
+| LOG-06 | WebRTC SFU Migration | S | ✅ Sprint 7 | webrtcsfu/sfu.go — ICE/Session-Events strukturiert |
+| LOG-07 | `POST /log` Endpoint — Frontend Log-Ingestion | M | ✅ Sprint 7 | HTTP 202, `service="frontend"` in Loki |
+| LOG-08 | Frontend `logger.ts` + Integration | M | ✅ Sprint 7 | fire-and-forget; E-Stop, Operator-Ack, WebRTC integriert |
+| LOG-09 | Loki + Grafana + Promtail Docker Compose | M | ✅ Sprint 7 | Ports 3100/3001; Docker-Label-Discovery; AVOC Session Dashboard |
+| LOG-10 | `pkg/audit/` — AuditWriter + SQLiteAuditWriter | M | ✅ Sprint 7 | WAL+fsync, NoopWriter, QueryBySession(), modernc.org/sqlite |
+| LOG-11 | Control Server Safety-Event-Integration | M | ✅ Sprint 7 | WriteSync() vor SAFE_MODE in detector.go/engine.go/websocket.go; GET /audit/events |
 
 **Abhängigkeitspfad:**
 ```
@@ -98,25 +98,21 @@ LOG-10 → LOG-11 (nach LOG-02)
 
 | Entscheidung | Blockiert | Referenz |
 |---|---|---|
-| Session Recording Storage (DB / Files / Object Storage) | zukünftige Recording-Qualität | ADR-005 Folge — MemoryRecorder als Platzhalter |
+| Session Recording Storage (DB / Files / Object Storage) | nach Sprint 7 | ADR-005 Folge — MemoryRecorder als Platzhalter |
 | DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
-| Audit Trail Strategy (Safety-Log-Garantie) | nach LOG-09 | ADR-018 — Loki ist kein Audit-Store |
+| Backup-Strategie Audit Store (SQLite Volume) | nach LOG-10 | ADR-019 möglich — SQLite-Volume-Sicherung für Produktivbetrieb |
 
 ---
 
 ## Phasen-Übersicht (Restarbeit)
 
 ```
-Phase 6 — Testing & Quality Gates
-  TEST-03 (Integration Test Infra)
-  TEST-04 (Frontend Test Infra — Vitest)
-  TEST-05 (Latenz-Tests CI) — BE-04 ✅: echter Protobuf-ACK jetzt messbar
-  DC-04   (README Troubleshooting)
+Phase 6 — Testing & Quality Gates ✅ (abgeschlossen 2026-06-04)
+  TEST-03 ✅ Integration Test Infra (docker-compose.test.yml, 9 Go Tests)
+  TEST-04 ✅ Frontend Test Infra — Vitest 31/31 + Playwright E2E
+  TEST-05 ✅ Latenz-Tests CI (Go Benchmark p99=0ms, k6 p99=244µs)
+  DC-04   ✅ README Troubleshooting + Contributor Guide
 
-Phase 7 — Logging (ADR-017)
-  LOG-01 pkg/logger shared package
-  LOG-02..06 Backend-Migration (parallel)
-  LOG-07 Frontend Log-Endpoint
-  LOG-08 Frontend logger.ts
-  LOG-09 Loki + Grafana + Promtail Infra
+Phase 7 — Logging & Audit Trail ✅ (abgeschlossen 2026-06-04)
+  LOG-01..11 alle abgeschlossen — Safety Regression 19/19 ✅
 ```

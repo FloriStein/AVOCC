@@ -19,8 +19,8 @@ Das AVOC-System ermöglicht einem Operator, ein Fahrzeug über eine Netzwerkverb
 ## Schnellstart
 
 ```bash
-# Proto-Code generieren (erforderlich vor dem ersten Start)
-make proto-gen
+# Proto-Code generieren (einmalig nach git clone oder proto/-Änderungen)
+make proto-gen-ts    # TypeScript via Docker (kein lokales protoc nötig)
 
 # Vollständiges System starten
 make up
@@ -28,14 +28,15 @@ make up
 # System stoppen
 make down
 
-# Tests ausführen
-make test
-
-# Safety Test Suite
-make test-safety
+# Tests
+make test               # alle Go-Tests
+make test-safety        # Safety Gate — muss 19/19 grün bleiben
+make test-integration   # Integration Tests (Stack startet/stoppt automatisch)
+make test-latency       # ACK-Roundtrip Benchmark <100ms (CI Build-Fail)
+make test-k6            # k6 Lasttest 10 VU / 30s
 ```
 
-**Voraussetzungen:** Docker, Docker Compose, `protoc` mit `protoc-gen-go` und `protoc-gen-es`
+**Voraussetzungen:** Docker, Docker Compose, Go 1.23
 
 ---
 
@@ -65,7 +66,7 @@ Service   (Go)         (Telemetry)
 
 | Bereich | Technologie |
 |---------|-------------|
-| Backend | Go 1.22 |
+| Backend | Go 1.23 |
 | Frontend | React 18 + TypeScript + Vite + Tailwind + Shadcn/ui |
 | Video | WebRTC SFU (Pion/Go) + coturn |
 | Messaging | Protobuf (Control/Safety/Telemetry) |
@@ -83,7 +84,7 @@ proto/          .proto Schemas (Single Source of Truth)
 gen/            Generierter Code (gitignored — make proto-gen)
 cmd/            Go Service Entry Points
 internal/       Service-interne Pakete
-pkg/            Shared Go-Pakete (ulid)
+pkg/            Shared Go-Pakete (ulid, logger, audit)
 frontend/       React App
 infrastructure/ Docker + Docker Compose
 tests/          Unit / Integration / E2E
@@ -100,12 +101,13 @@ tasks/          Sprint-Planung (backlog, current-sprint, done)
 | [docs/vision.md](docs/vision.md) | Projektvision, Ziele, Erfolgskriterien |
 | [docs/requirements.md](docs/requirements.md) | Funktionale & nichtfunktionale Anforderungen |
 | [docs/architecture.md](docs/architecture.md) | Systemdesign, Komponenten, Verzeichnisstruktur |
-| [docs/implementation-plan.md](docs/implementation-plan.md) | Phasen, Tasks, ADR-Index (16 ADRs) |
+| [DOKU.MD](DOKU.MD) | Vollständige Projektdokumentation für neue Entwickler (inkl. Codebeispiele) |
+| [docs/implementation-plan.md](docs/implementation-plan.md) | Phasen, Tasks, ADR-Index (18 ADRs) |
 | [docs/adr/](docs/adr/) | Alle Architecture Decision Records |
 | [DECISIONS.MD](DECISIONS.MD) | Live-Übersicht aller Entscheidungen |
 | [CONTEXT.MD](CONTEXT.MD) | Glossar, Domänenmodell, Architekturprinzipien |
 | [tasks/backlog.md](tasks/backlog.md) | Vollständiger Task-Backlog |
-| [tasks/current-sprint.md](tasks/current-sprint.md) | Aktiver Sprint |
+| [tasks/done.md](tasks/done.md) | Abgeschlossene Sprints (1–7) |
 
 ---
 

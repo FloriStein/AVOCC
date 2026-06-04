@@ -29,6 +29,10 @@ services:
       SAFETY_SERVICE_URL: "http://safety-service:8082"
       SFU_SERVICE_URL: "http://webrtc-sfu:8084"
       AUTH_SERVICE_URL: "http://auth-service:8081"
+      AUDIT_DB_PATH: "/data/audit/avoc_audit.db"
+      LOG_LEVEL: "info"
+    volumes:
+      - audit-data:/data/audit
     depends_on:
       - auth-service
       - safety-service
@@ -126,6 +130,52 @@ services:
     networks:
       - avoc-net
 
+  # ─── Loki — Log Aggregation (ADR-017, LOG-09) ─────────────────────────────
+  loki:
+    image: grafana/loki:3.0.0
+    ports:
+      - "3100:3100"
+    volumes:
+      - ../loki/loki.yml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+    command: -config.file=/etc/loki/config.yaml
+    networks:
+      - avoc-net
+
+  # ─── Promtail — Docker Log Collector (ADR-017, LOG-09) ────────────────────
+  promtail:
+    image: grafana/promtail:3.0.0
+    volumes:
+      - ../promtail/promtail.yml:/etc/promtail/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: -config.file=/etc/promtail/config.yaml
+    depends_on:
+      - loki
+    networks:
+      - avoc-net
+
+  # ─── Grafana — Log Visualisation (ADR-017, LOG-09) ────────────────────────
+  grafana:
+    image: grafana/grafana:11.0.0
+    ports:
+      - "3001:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - loki
+    networks:
+      - avoc-net
+
 networks:
   avoc-net:
     driver: bridge
+
+volumes:
+  audit-data:   # SQLite audit store — persistent safety event log (ADR-018)
+  loki-data:    # Loki log storage — 30d retention (ADR-017)
+  grafana-data: # Grafana state (dashboards, alerts)

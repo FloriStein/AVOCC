@@ -4,7 +4,6 @@
 package transport
 
 import (
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -15,10 +14,15 @@ import (
 	csafety "avoc/internal/controlserver/safety"
 	"avoc/internal/controlserver/session"
 	"avoc/internal/controlserver/statemachine"
+	"avoc/pkg/audit"
+	"avoc/pkg/logger"
+	"avoc/pkg/ulid"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
 )
+
+var svcLog = logger.New("control-server")
 
 const heartbeatInterval = 30 * time.Second
 
@@ -32,12 +36,13 @@ type Claims struct {
 }
 
 type WSHandler struct {
-	jwtSecret  []byte
-	sm         *statemachine.Machine
-	sessionMgr *session.Manager
-	deadman    *csafety.DeadmanWatchdog
-	ackWatcher *csafety.ACKTimeoutWatcher
-	engine     *command.Engine
+	jwtSecret   []byte
+	sm          *statemachine.Machine
+	sessionMgr  *session.Manager
+	deadman     *csafety.DeadmanWatchdog
+	ackWatcher  *csafety.ACKTimeoutWatcher
+	engine      *command.Engine
+	auditWriter audit.AuditWriter
 }
 
 func NewWSHandler(
@@ -58,6 +63,12 @@ func NewWSHandler(
 	}
 }
 
+// WithAuditWriter sets the audit writer for WS_DISCONNECT persistence (ADR-018).
+func (h *WSHandler) WithAuditWriter(aw audit.AuditWriter) *WSHandler {
+	h.auditWriter = aw
+	return h
+}
+
 // ServeWS upgrades the connection and validates JWT in the handshake (ADR-004).
 // On success transitions CONNECTING → AUTHENTICATED (ADR-011).
 func (h *WSHandler) ServeWS(w http.ResponseWriter, r *http.Request) {
@@ -75,7 +86,7 @@ func (h *WSHandler) ServeWS(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("WebSocket upgrade failed: %v", err)
+		svcLog.Error("WebSocket upgrade failed", "error", err)
 		return
 	}
 	defer conn.Close()
@@ -89,7 +100,7 @@ func (h *WSHandler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	}
 	h.sm.TransitionSystem(statemachine.StateAuthenticated)
 
-	log.Printf("WebSocket connected: subject=%s role=%s", claims.Subject, claims.Role)
+	svcLog.Info("WebSocket connected", "subject", claims.Subject, "role", claims.Role)
 
 	go h.heartbeat(conn)
 	h.readLoop(conn, claims)
@@ -111,15 +122,40 @@ func (h *WSHandler) readLoop(conn *websocket.Conn, claims *Claims) {
 		sysState, _, _, _ := h.sm.Get()
 		if sysState != statemachine.StateSafeMode {
 			// WS disconnect → CRITICAL → SAFE_MODE + Channel Close (ADR-009/010)
+			svcLog.Event(logger.EventWsDisconnect,
+				"WebSocket disconnected → SAFE_MODE",
+				"subject", claims.Subject)
+
+			// Write to audit store BEFORE state transition (ADR-018)
+			if h.auditWriter != nil {
+				sys, ctrl, _, _ := h.sm.Get()
+				if sess, ok := h.sessionMgr.GetCurrentSession(); ok {
+					if err := h.auditWriter.WriteSync(audit.SafetyAuditEvent{
+						EventID:     ulid.Generate(),
+						SessionID:   sess.ID,
+						VehicleID:   sess.VehicleID,
+						OperatorID:  sess.OperatorID,
+						EventType:   logger.EventWsDisconnect,
+						Reason:      "operator WebSocket disconnected",
+						SystemState: string(sys),
+						CtrlState:   string(ctrl),
+						Timestamp:   time.Now(),
+					}); err != nil {
+						svcLog.Error("audit write failed — proceeding to SAFE_MODE", "error", err)
+					}
+				}
+			}
+
 			h.sm.TransitionSystem(statemachine.StateSafeMode)
-			log.Printf("WebSocket disconnected: WS_DISCONNECT → SAFE_MODE (subject=%s)", claims.Subject)
 		}
 		// Save recovery checkpoint on SAFE_MODE entry
 		sys, ctrl, _, _ := h.sm.Get()
 		if sess, ok := h.sessionMgr.GetCurrentSession(); ok {
 			h.sessionMgr.SaveCheckpoint(string(sys), string(ctrl), "WS_DISCONNECT")
 			h.sessionMgr.PushSFUEvent("SESSION_SAFE_MODE")
-			log.Printf("[SESSION] checkpoint saved (session=%s)", sess.ID)
+			svcLog.Event(logger.EventSafeModeEntered,
+				"recovery checkpoint saved",
+				"session_id", sess.ID)
 		}
 	}()
 
@@ -146,8 +182,6 @@ func (h *WSHandler) readLoop(conn *websocket.Conn, claims *Claims) {
 			h.ackWatcher.CommandReceived(sess.ID, sess.VehicleID)
 		}
 
-		// Route command through the Command Engine — parses Protobuf ControlCommand,
-		// handles DEADMAN_HOLD/RELEASE, EMERGENCY_STOP, and control inputs (BE-04).
 		var ackBytes []byte
 		if hasSession {
 			var err error

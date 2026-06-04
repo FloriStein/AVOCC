@@ -2,13 +2,15 @@ package main
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"os"
 	"strings"
 
 	"avoc/internal/telemetryservice"
+	"avoc/pkg/logger"
 )
+
+var log = logger.New("telemetry-service")
 
 func main() {
 	port := os.Getenv("TELEMETRY_PORT")
@@ -22,13 +24,12 @@ func main() {
 
 	client := telemetryservice.NewClient(broker)
 	if err := client.Connect(); err != nil {
-		log.Fatalf("[TELEMETRY] MQTT connect failed: %v", err)
+		log.Fatal("MQTT connect failed", "broker", broker, "error", err)
 	}
 	defer client.Disconnect()
 
 	mux := http.NewServeMux()
 
-	// GET /telemetry/latest/{vehicleId} — latest TelemetryEvent for a vehicle
 	mux.HandleFunc("GET /telemetry/latest/", func(w http.ResponseWriter, r *http.Request) {
 		vehicleID := strings.TrimPrefix(r.URL.Path, "/telemetry/latest/")
 		if vehicleID == "" {
@@ -58,8 +59,8 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "telemetry-service"})
 	})
 
-	log.Printf("Telemetry Service starting on :%s (broker=%s)", port, broker)
+	log.Info("Telemetry Service starting", "port", port, "broker", broker)
 	if err := http.ListenAndServe(":"+port, mux); err != nil {
-		log.Fatalf("Telemetry Service failed: %v", err)
+		log.Fatal("Telemetry Service failed", "error", err)
 	}
 }

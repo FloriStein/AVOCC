@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -14,14 +13,18 @@ import (
 	"avoc/internal/controlserver/transport"
 	"avoc/internal/recording"
 	"avoc/internal/vehicleconnection"
+	"avoc/pkg/audit"
+	"avoc/pkg/logger"
 	"avoc/pkg/ulid"
 )
 
+var log = logger.New("control-server")
+
+// feLog logs frontend events received via POST /log (service label: "frontend")
+var feLog = logger.New("frontend")
+
 func main() {
-	port := os.Getenv("CONTROL_PORT")
-	if port == "" {
-		port = "8080"
-	}
+	port := envOr("CONTROL_PORT", "8080")
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
 		log.Fatal("JWT_SECRET environment variable is required")
@@ -31,28 +34,42 @@ func main() {
 	sfuURL := envOr("SFU_SERVICE_URL", "http://webrtc-sfu:8084")
 	authURL := envOr("AUTH_SERVICE_URL", "http://auth-service:8081")
 
+	// --- Audit Writer (LOG-10/11 — ADR-018) ---
+	dbPath := envOr("AUDIT_DB_PATH", "/data/audit/avoc_audit.db")
+	var auditWriter audit.AuditWriter
+	sqliteWriter, err := audit.NewSQLiteAuditWriter(dbPath)
+	if err != nil {
+		log.Warn("audit store unavailable — using NoopWriter", "error", err, "path", dbPath)
+		auditWriter = audit.NewNoopWriter()
+	} else {
+		auditWriter = sqliteWriter
+		defer sqliteWriter.Close()
+		log.Info("audit store ready", "path", dbPath)
+	}
+
 	// --- Core components ---
 	sm := statemachine.New()
 	safetyPub := csafety.NewHTTPPublisher(safetyURL)
 	sfuPub := session.NewHTTPSFUPublisher(sfuURL)
 	sessionMgr := session.NewManager(sfuPub)
-	deadman := csafety.NewDeadmanWatchdog(csafety.DefaultDeadmanTimeout, sm, safetyPub)
-	ackWatcher := csafety.NewACKTimeoutWatcher(csafety.DefaultACKTimeout, sm, safetyPub)
+	deadman := csafety.NewDeadmanWatchdog(csafety.DefaultDeadmanTimeout, sm, safetyPub).
+		WithAuditWriter(auditWriter)
+	ackWatcher := csafety.NewACKTimeoutWatcher(csafety.DefaultACKTimeout, sm, safetyPub).
+		WithAuditWriter(auditWriter)
 	handoverMgr := session.NewHandoverManager(sm, sessionMgr, authURL)
 	recorder := recording.NewMemoryRecorder()
-	cmdEngine := command.NewEngine(sm, safetyPub, sessionMgr, deadman)
+	cmdEngine := command.NewEngine(sm, safetyPub, sessionMgr, deadman).
+		WithAuditWriter(auditWriter)
 
 	// --- Handlers ---
-	wsHandler := transport.NewWSHandler(secret, sm, sessionMgr, deadman, ackWatcher, cmdEngine)
+	wsHandler := transport.NewWSHandler(secret, sm, sessionMgr, deadman, ackWatcher, cmdEngine).
+		WithAuditWriter(auditWriter)
 	vehicleHandler := vehicleconnection.NewHandler(secret, sm, safetyPub)
 
 	// --- Routes ---
 	mux := http.NewServeMux()
 
-	// Operator WebSocket (ADR-010)
 	mux.HandleFunc("/ws", wsHandler.ServeWS)
-
-	// Vehicle WebSocket (BE-06)
 	mux.HandleFunc("/vehicle/ws", vehicleHandler.ServeWS)
 
 	// Session lifecycle (GSA — ADR-015)
@@ -77,7 +94,8 @@ func main() {
 		recorder.StartSession(sess.ID, sess.VehicleID, sess.OperatorID)
 		sys, ctrl, _, _ := sm.Get()
 		recorder.RecordStateSnapshot(sess.ID, ulid.Generate(), sess.VehicleID, sess.OperatorID, string(sys), string(ctrl))
-		log.Printf("[SESSION] started: id=%s vehicle=%s operator=%s", sess.ID, sess.VehicleID, sess.OperatorID)
+		log.Event(logger.EventSessionStarted, "session started",
+			"session_id", sess.ID, "vehicle_id", sess.VehicleID, "operator_id", sess.OperatorID)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"session_id": sess.ID})
 	})
@@ -85,6 +103,7 @@ func main() {
 	mux.HandleFunc("POST /session/end", func(w http.ResponseWriter, _ *http.Request) {
 		if sess, ok := sessionMgr.GetCurrentSession(); ok {
 			recorder.EndSession(sess.ID)
+			log.Event(logger.EventSessionEnded, "session ended", "session_id", sess.ID)
 		}
 		sessionMgr.PushSFUEvent("SESSION_ENDED")
 		sessionMgr.EndSession()
@@ -129,8 +148,7 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	// MEDIA STATE update — frontend reports WebRTC state changes (ADR-009/011 Invariant 1)
-	// MEDIA_FAILED → DEGRADED (never SAFE_MODE)
+	// MEDIA STATE update (ADR-009/011 Invariant 1)
 	mux.HandleFunc("POST /media/event", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			State string `json:"state"`
@@ -147,7 +165,7 @@ func main() {
 		case "MEDIA_DEGRADED":
 			sm.TransitionMedia(statemachine.MediaDegraded)
 		case "MEDIA_FAILED":
-			sm.TransitionMedia(statemachine.MediaFailed) // → DEGRADED, never SAFE_MODE
+			sm.TransitionMedia(statemachine.MediaFailed)
 		case "MEDIA_INIT":
 			sm.TransitionMedia(statemachine.MediaInit)
 		default:
@@ -157,7 +175,7 @@ func main() {
 		w.WriteHeader(http.StatusAccepted)
 	})
 
-	// Emergency Stop proxy — frontend calls this to avoid cross-origin issues (ADR-009)
+	// Emergency Stop proxy (ADR-009)
 	mux.HandleFunc("POST /emergency-stop", func(w http.ResponseWriter, r *http.Request) {
 		sess, _ := sessionMgr.GetCurrentSession()
 		safetyPub.TriggerEmergencyStop(sess.ID, sess.VehicleID, "operator emergency stop")
@@ -168,6 +186,52 @@ func main() {
 			recorder.RecordSafetyEvent(sess.ID, ulid.Generate(), sess.VehicleID, sess.OperatorID, "EMERGENCY_STOP", "operator emergency stop")
 		}
 		w.WriteHeader(http.StatusAccepted)
+	})
+
+	// LOG-07: Frontend log ingestion — Browser → POST /log → slog (service="frontend") → Loki
+	mux.HandleFunc("POST /log", func(w http.ResponseWriter, r *http.Request) {
+		var entry struct {
+			Level      string         `json:"level"`
+			EventType  string         `json:"event_type"`
+			SessionID  string         `json:"session_id"`
+			VehicleID  string         `json:"vehicle_id"`
+			OperatorID string         `json:"operator_id"`
+			EventID    string         `json:"event_id"`
+			Message    string         `json:"msg"`
+			Data       map[string]any `json:"data,omitempty"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&entry); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		if entry.Message == "" {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		feLog.Event(entry.EventType, entry.Message,
+			"session_id", entry.SessionID,
+			"vehicle_id", entry.VehicleID,
+			"operator_id", entry.OperatorID,
+			"event_id", entry.EventID,
+		)
+		w.WriteHeader(http.StatusAccepted)
+	})
+
+	// LOG-11: Audit events query endpoint
+	mux.HandleFunc("GET /audit/events", func(w http.ResponseWriter, r *http.Request) {
+		sessionID := r.URL.Query().Get("session_id")
+		if sessionID == "" {
+			http.Error(w, "session_id required", http.StatusBadRequest)
+			return
+		}
+		events, err := auditWriter.QueryBySession(sessionID)
+		if err != nil {
+			log.Error("audit query failed", "error", err, "session_id", sessionID)
+			http.Error(w, "query failed", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(events)
 	})
 
 	// Recording inspection (ADR-005)
@@ -207,9 +271,9 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "control-server"})
 	})
 
-	log.Printf("Control Server starting on :%s", port)
+	log.Info("Control Server starting", "port", port)
 	if err := http.ListenAndServe(":"+port, mux); err != nil {
-		log.Fatalf("Control Server failed: %v", err)
+		log.Fatal("Control Server failed", "error", err)
 	}
 }
 

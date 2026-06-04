@@ -244,10 +244,10 @@ JWT = Identity (Wer bist du?) ≠ Session-ID (In welchem Kontext?)
 
 | Frage | Blockiert | Referenz |
 |-------|-----------|----------|
-| Prioritätsmodell technisch (Channels vs. Header-Flag) | nach Sprint 7 | ADR-008 Folge — BE-04 nutzt Publisher-Pattern; explizite Channel-Trennung noch offen |
-| Session Recording Storage (DB / Files / Object Storage) | nach Sprint 7 | ADR-005 Folge — MemoryRecorder seit Sprint 4 als Platzhalter aktiv; Storage-ADR ausstehend |
+| Prioritätsmodell technisch (Channels vs. Header-Flag) | offen | ADR-008 Folge — BE-04 nutzt Publisher-Pattern; explizite Channel-Trennung noch offen |
+| Session Recording Storage (DB / Files / Object Storage) | offen | ADR-005 Folge — MemoryRecorder seit Sprint 4 als Platzhalter aktiv; Storage-ADR ausstehend |
 | DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
-| Backup-Strategie Audit Store (SQLite Volume) | nach LOG-10 | ADR-019 möglich — SQLite-Volume-Sicherung für Produktivbetrieb |
+| Backup-Strategie Audit Store (SQLite Volume) | offen | ADR-019 möglich — SQLite-Volume-Sicherung für Produktivbetrieb (LOG-10 implementiert) |
 
 ---
 

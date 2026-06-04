@@ -1,13 +1,13 @@
 # Implementation Plan — Teleoperation System
 
-Stand: 2026-06-03
-Status: Phase 1/2/3/4/5/6 abgeschlossen ✅ — Phase 7 offen (18 ADRs — ADR-017/018 nach Grill-Me ergänzt)
+Stand: 2026-06-04
+Status: Phase 1/2/3/4/5/6/7 abgeschlossen ✅ — alle 42 Tasks · 18 ADRs
 
 ---
 
 ## 1. Executive Summary
 
-Wir bauen ein sicheres, modulares Echtzeit-Teleoperation-System zur Fernsteuerung von Fahrzeugen über das offene Internet (Vehicle ↔ Internet ↔ OCC, uncontrolled routing). Die Architektur ist durch 18 ADRs entschieden. Nach 6 Sprints sind vollständiges Frontend, Backend, Video-Channel und Test-Infrastruktur produktionsbereit. Phase 7 integriert das Logging-System (ADR-017/018) mit strukturiertem slog, SQLite Audit Trail und Loki + Grafana.
+Wir bauen ein sicheres, modulares Echtzeit-Teleoperation-System zur Fernsteuerung von Fahrzeugen über das offene Internet (Vehicle ↔ Internet ↔ OCC, uncontrolled routing). Die Architektur ist durch 18 ADRs entschieden. Nach 7 Sprints (42 Tasks) ist das System vollständig produktionsbereit: Frontend, Backend, Video-Channel, Test-Infrastruktur und das Logging-System (ADR-017/018) mit strukturiertem slog, SQLite Audit Trail und Loki + Grafana sind implementiert.
 
 **Nicht-Verhandelbar:**
 - Safety First — SAFE MODE ist nicht überbrückbar, Video darf SAFE MODE nie triggern
@@ -334,7 +334,7 @@ BE-11 ─────────────────────┘
 
 ---
 
-### Phase 7 — Logging & Audit Trail (ADR-017/018)
+### Phase 7 — Logging & Audit Trail (ADR-017/018) ✅ *(Sprint 7, abgeschlossen 2026-06-04)*
 
 **Ziel:** Vollständig strukturiertes Logging. Safety Events garantiert persistent. Grafana-Dashboard für Session-Rekonstruktion.
 
@@ -357,15 +357,15 @@ BE-11 ─────────────────────┘
 ## 9. Vollständige Task-Übersicht
 
 ```
-42 Tasks gesamt / 6 Epics
+42 Tasks gesamt / 7 Epics — alle abgeschlossen ✅
 
-Phase 1 (Sprint 1): INFRA-01, FE-01, BE-01, BE-02, BE-03, BE-11, DC-01, DC-02, DC-03
-Phase 2:           BE-06, BE-09, BE-10, BE-12, TEST-01, TEST-02
-Phase 3:           FE-02, FE-03, FE-04, FE-08, FE-09
-Phase 4:           BE-04, BE-05, BE-07, BE-08
-Phase 5:           FE-05, FE-06, FE-07
-Phase 6 ✅:        TEST-03, TEST-04, TEST-05, DC-04
-Phase 7:           LOG-01..11
+Phase 1 ✅ (Sprint 1): INFRA-01, FE-01, BE-01, BE-02, BE-03, BE-11, DC-01, DC-02, DC-03
+Phase 2 ✅:            BE-06, BE-09, BE-10, BE-12, TEST-01, TEST-02
+Phase 3 ✅:            FE-02, FE-03, FE-04, FE-08, FE-09
+Phase 4 ✅:            BE-04, BE-05, BE-07, BE-08
+Phase 5 ✅:            FE-05, FE-06, FE-07
+Phase 6 ✅:            TEST-03, TEST-04, TEST-05, DC-04
+Phase 7 ✅:            LOG-01..11
 ```
 
 ---
@@ -374,10 +374,10 @@ Phase 7:           LOG-01..11
 
 | Entscheidung | Blockiert | Referenz |
 |---|---|---|
-| Prioritätsmodell technisch (Channels vs. Header-Flag) | nach Sprint 7 | ADR-008 Folge — explizite Channel-Trennung noch offen |
-| Session Recording Storage (DB/Files/Object Storage) | nach Sprint 7 | ADR-005 Folge — MemoryRecorder als Platzhalter |
+| Prioritätsmodell technisch (Channels vs. Header-Flag) | offen | ADR-008 Folge — BE-04 nutzt Publisher-Pattern; explizite Channel-Trennung noch offen |
+| Session Recording Storage (DB/Files/Object Storage) | offen | ADR-005 Folge — MemoryRecorder als Platzhalter; Storage-ADR ausstehend |
 | DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
-| Backup-Strategie Audit Store (SQLite Volume) | nach LOG-10 | ADR-019 möglich |
+| Backup-Strategie Audit Store (SQLite Volume) | offen | ADR-019 möglich — SQLite-Volume-Sicherung für Produktivbetrieb |
 
 ---
 

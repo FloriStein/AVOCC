@@ -82,7 +82,7 @@ src/
 │   └── VideoPanel.tsx        # WebRTC Video Element, MEDIA STATE Badge, Overlays, Retry
 ├── hooks/
 │   ├── useControls.ts        # 20 Hz Keyboard/Joystick/Gamepad → Protobuf STEER/THROTTLE/BRAKE/SPEED
-│   ├── useDeadmanSwitch.ts   # Spacebar/Mousedown → DEADMAN_HOLD Commands (400ms Interval)
+│   ├── useDeadmanSwitch.ts   # Spacebar/Mousedown → DEADMAN_HOLD Commands (1500ms Interval)
 │   ├── useSession.ts         # Login, WS-Connect, Session-Start, Reconnect (Exponential Backoff)
 │   ├── useSystemState.ts     # Polling GET /api/state (500ms), 4-Layer State
 │   ├── useTelemetry.ts       # Polling GET /telemetry/latest/{vehicleId} (1000ms)

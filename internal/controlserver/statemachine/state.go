@@ -4,9 +4,12 @@
 package statemachine
 
 import (
-	"log"
 	"sync"
+
+	"avoc/pkg/logger"
 )
+
+var svcLog = logger.New("control-server")
 
 // SystemState represents the master safety state (ADR-011).
 type SystemState string
@@ -119,11 +122,12 @@ func (m *Machine) TransitionSystem(next SystemState) {
 	defer m.mu.Unlock()
 
 	if !isValidTransition(m.System, next) {
-		log.Printf("[STATE] invalid transition rejected: %s → %s", m.System, next)
+		svcLog.Warn("invalid state transition rejected", "from", m.System, "to", next)
 		return
 	}
 
-	log.Printf("[STATE] SYSTEM: %s → %s", m.System, next)
+	svcLog.Event(logger.EventStateTransition, "system state transition",
+		"from", m.System, "to", next)
 	m.System = next
 
 	switch next {
@@ -148,10 +152,11 @@ func (m *Machine) TransitionToConnected() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.System != StateAuthenticated {
-		log.Printf("[STATE] TransitionToConnected rejected: must be AUTHENTICATED, was %s", m.System)
+		svcLog.Warn("TransitionToConnected rejected", "current_state", m.System)
 		return false
 	}
-	log.Printf("[STATE] SYSTEM: %s → %s", m.System, StateConnected)
+	svcLog.Event(logger.EventStateTransition, "system state transition",
+		"from", m.System, "to", StateConnected)
 	m.System = StateConnected
 	m.Control = ControlActive
 	return true
@@ -164,7 +169,9 @@ func (m *Machine) TransitionMedia(next MediaState) {
 	defer m.mu.Unlock()
 	m.Media = next
 	if (next == MediaFailed || next == MediaDegraded) && m.System == StateConnected {
-		log.Printf("[STATE] MEDIA %s → SYSTEM DEGRADED (Invariant 1: never SAFE_MODE)", next)
+		svcLog.Event(logger.EventMediaStateChange,
+			"media failure → SYSTEM DEGRADED (Invariant 1: never SAFE_MODE)",
+			"media_state", next)
 		m.System = StateDegraded
 	}
 }
@@ -175,7 +182,8 @@ func (m *Machine) TransitionOperator(next OperatorState) {
 	defer m.mu.Unlock()
 	m.Operator = next
 	if next == OpNoOperator && (m.System == StateConnected || m.System == StateDegraded) {
-		log.Printf("[STATE] OPERATOR → NO_OPERATOR → SAFE_MODE (no active operator)")
+		svcLog.Event(logger.EventSafeModeEntered,
+			"NO_OPERATOR → SAFE_MODE", "trigger", "no_active_operator")
 		m.System = StateSafeMode
 		m.Control = ControlBlocked
 	}

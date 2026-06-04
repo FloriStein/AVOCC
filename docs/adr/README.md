@@ -6,7 +6,7 @@ Vollständige Live-Übersicht: [DECISIONS.MD](../../DECISIONS.MD)
 
 ---
 
-## ADR-Index (16 ADRs)
+## ADR-Index (18 ADRs)
 
 | ADR | Titel | Kernentscheidung |
 |-----|-------|-----------------|
@@ -36,8 +36,8 @@ Vollständige Live-Übersicht: [DECISIONS.MD](../../DECISIONS.MD)
 
 | Thema | Blockiert | Referenz |
 |-------|-----------|----------|
-| Prioritätsmodell technisch (Channels vs. Header-Flag) | TEST-05 / Sprint 6 | ADR-008 Folge |
-| Session Recording Storage (DB/Files/Object Storage) | nach Sprint 6 | ADR-005 Folge — MemoryRecorder aktiv seit Sprint 4 |
+| Prioritätsmodell technisch (Channels vs. Header-Flag) | nach Sprint 7 | ADR-008 Folge |
+| Session Recording Storage (DB/Files/Object Storage) | nach Sprint 7 | ADR-005 Folge — MemoryRecorder aktiv seit Sprint 4 |
 | DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
 | Backup-Strategie Audit Store | nach LOG-10 | ADR-019 möglich — SQLite-Volume-Sicherung für Produktivbetrieb |
 

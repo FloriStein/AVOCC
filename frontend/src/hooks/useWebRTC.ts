@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { reportMediaState } from '@/lib/api-client'
+import { FE_WEBRTC_STATE, logEvent } from '@/lib/logger'
 
 const OPERATOR_PEER_ID = 'operator-1'
 
@@ -19,7 +20,9 @@ export function useWebRTC(sessionId: string | null, enabled: boolean) {
     setMediaState(state)
     // Notify Control Server — MEDIA_FAILED → DEGRADED (never SAFE_MODE, ADR-009 Invariant 1)
     reportMediaState(state).catch(() => {})
-  }, [])
+    logEvent(FE_WEBRTC_STATE, 'WebRTC media state changed',
+      { sessionId: sessionId ?? '', data: { state } })
+  }, [sessionId])
 
   const disconnect = useCallback(() => {
     if (pcRef.current) {

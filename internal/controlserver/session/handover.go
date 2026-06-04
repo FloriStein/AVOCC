@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 
 	"avoc/internal/controlserver/statemachine"
+	"avoc/pkg/logger"
 )
+
+var svcLog = logger.New("control-server")
 
 // HandoverManager coordinates operator handover (ADR-011/015).
 // Rules: max 1 ACTIVE_OPERATOR, both sides must confirm, current operator retains
@@ -54,7 +56,8 @@ func (h *HandoverManager) RequestHandover(fromOperatorID, toOperatorID string) e
 	}
 
 	h.sm.TransitionOperator(statemachine.OpHandoverPending)
-	log.Printf("[HANDOVER] requested: %s → %s", fromOperatorID, toOperatorID)
+	svcLog.Info("handover requested",
+		"from_operator", fromOperatorID, "to_operator", toOperatorID)
 	return nil
 }
 
@@ -72,7 +75,6 @@ func (h *HandoverManager) ConfirmHandover(confirmingOperatorID string) error {
 			confirmingOperatorID, h.pending.toOperatorID)
 	}
 
-	// Issue ACTIVE_OPERATOR token for the incoming operator via Auth Service.
 	if err := h.issueHandoverToken(h.pending.toOperatorID); err != nil {
 		return fmt.Errorf("handover token issuance failed: %w", err)
 	}
@@ -81,7 +83,8 @@ func (h *HandoverManager) ConfirmHandover(confirmingOperatorID string) error {
 	h.sm.TransitionOperator(statemachine.OpActive)
 	h.sessions.PushSFUEvent("OPERATOR_HANDOVER")
 
-	log.Printf("[HANDOVER] confirmed: new ACTIVE_OPERATOR=%s", h.pending.toOperatorID)
+	svcLog.Event(logger.EventOperatorHandover, "handover confirmed",
+		"new_active_operator", h.pending.toOperatorID)
 	h.pending = nil
 	return nil
 }
@@ -94,7 +97,8 @@ func (h *HandoverManager) CancelHandover() {
 	if h.pending == nil {
 		return
 	}
-	log.Printf("[HANDOVER] cancelled: %s → %s", h.pending.fromOperatorID, h.pending.toOperatorID)
+	svcLog.Info("handover cancelled",
+		"from_operator", h.pending.fromOperatorID, "to_operator", h.pending.toOperatorID)
 	h.pending = nil
 	h.sm.TransitionOperator(statemachine.OpActive)
 }

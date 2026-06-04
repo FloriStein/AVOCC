@@ -1,13 +1,17 @@
 package safety
 
 import (
-	"log"
 	"sync"
 	"time"
 
 	"avoc/internal/controlserver/statemachine"
 	"avoc/internal/safetyservice"
+	"avoc/pkg/audit"
+	"avoc/pkg/logger"
+	"avoc/pkg/ulid"
 )
+
+var svcLog = logger.New("control-server")
 
 const (
 	DefaultDeadmanTimeout = 10 * time.Second
@@ -23,15 +27,16 @@ const (
 // must send at least one DEADMAN_HOLD to arm the watchdog. This prevents
 // Safe Mode from firing before the operator has had a chance to interact.
 type DeadmanWatchdog struct {
-	mu        sync.Mutex
-	timer     *time.Timer
-	timeout   time.Duration
-	sm        *statemachine.Machine
-	publisher Publisher
-	sessionID string
-	vehicleID string
-	stopped   bool
-	armed     bool // true after the first Reset() — only then does the countdown run
+	mu          sync.Mutex
+	timer       *time.Timer
+	timeout     time.Duration
+	sm          *statemachine.Machine
+	publisher   Publisher
+	auditWriter audit.AuditWriter
+	sessionID   string
+	vehicleID   string
+	stopped     bool
+	armed       bool // true after the first Reset() — only then does the countdown run
 }
 
 func NewDeadmanWatchdog(timeout time.Duration, sm *statemachine.Machine, publisher Publisher) *DeadmanWatchdog {
@@ -40,6 +45,13 @@ func NewDeadmanWatchdog(timeout time.Duration, sm *statemachine.Machine, publish
 		sm:        sm,
 		publisher: publisher,
 	}
+}
+
+// WithAuditWriter sets the audit writer for guaranteed safety-event persistence (ADR-018).
+// Call before Start(). Safe to omit in tests (nil = no-op).
+func (w *DeadmanWatchdog) WithAuditWriter(aw audit.AuditWriter) *DeadmanWatchdog {
+	w.auditWriter = aw
+	return w
 }
 
 // Start registers the session and prepares the watchdog, but does NOT start the timer.
@@ -55,7 +67,8 @@ func (w *DeadmanWatchdog) Start(sessionID, vehicleID string) {
 	w.stopped = false
 	w.armed = false
 	w.timer = nil
-	log.Printf("[DEADMAN] watchdog ready (timeout=%s, session=%s) — waiting for first HOLD", w.timeout, sessionID)
+	svcLog.Info("dead-man watchdog ready — waiting for first HOLD",
+		"timeout", w.timeout, "session_id", sessionID)
 }
 
 // Reset arms the watchdog on the first call and resets the timer on all subsequent calls.
@@ -69,7 +82,8 @@ func (w *DeadmanWatchdog) Reset() {
 	if !w.armed {
 		w.armed = true
 		w.timer = time.AfterFunc(w.timeout, w.fire)
-		log.Printf("[DEADMAN] watchdog armed (session=%s)", w.sessionID)
+		svcLog.Event(logger.EventDeadmanArmed, "dead-man watchdog armed",
+			"session_id", w.sessionID)
 		return
 	}
 	if w.timer != nil {
@@ -85,7 +99,7 @@ func (w *DeadmanWatchdog) Stop() {
 	if w.timer != nil {
 		w.timer.Stop()
 	}
-	log.Printf("[DEADMAN] watchdog stopped (session=%s)", w.sessionID)
+	svcLog.Info("dead-man watchdog stopped", "session_id", w.sessionID)
 }
 
 func (w *DeadmanWatchdog) fire() {
@@ -99,7 +113,27 @@ func (w *DeadmanWatchdog) fire() {
 	w.stopped = true
 	w.mu.Unlock()
 
-	log.Printf("[DEADMAN] timeout — CRITICAL → SAFE_MODE (session=%s)", sessionID)
+	svcLog.Event(logger.EventDeadmanTimeout,
+		"dead-man timeout — CRITICAL → SAFE_MODE",
+		"session_id", sessionID, "vehicle_id", vehicleID)
+
+	// Write to audit store BEFORE state transition (ADR-018)
+	if w.auditWriter != nil {
+		sys, ctrl, _, _ := w.sm.Get()
+		if err := w.auditWriter.WriteSync(audit.SafetyAuditEvent{
+			EventID:     ulid.Generate(),
+			SessionID:   sessionID,
+			VehicleID:   vehicleID,
+			EventType:   logger.EventDeadmanTimeout,
+			Reason:      "dead-man switch timeout — operator released hold",
+			SystemState: string(sys),
+			CtrlState:   string(ctrl),
+			Timestamp:   time.Now(),
+		}); err != nil {
+			svcLog.Error("audit write failed — proceeding to SAFE_MODE", "error", err)
+		}
+	}
+
 	w.sm.TransitionSystem(statemachine.StateSafeMode)
 	w.publisher.PublishEvent(safetyservice.SafetyEvent{
 		SessionID: sessionID,
@@ -119,6 +153,7 @@ type ACKTimeoutWatcher struct {
 	timeout      time.Duration
 	sm           *statemachine.Machine
 	publisher    Publisher
+	auditWriter  audit.AuditWriter
 	sessionID    string
 	vehicleID    string
 }
@@ -129,6 +164,12 @@ func NewACKTimeoutWatcher(timeout time.Duration, sm *statemachine.Machine, publi
 		sm:        sm,
 		publisher: publisher,
 	}
+}
+
+// WithAuditWriter sets the audit writer for guaranteed safety-event persistence (ADR-018).
+func (w *ACKTimeoutWatcher) WithAuditWriter(aw audit.AuditWriter) *ACKTimeoutWatcher {
+	w.auditWriter = aw
+	return w
 }
 
 // CommandReceived starts a per-command ACK timer.
@@ -161,7 +202,27 @@ func (w *ACKTimeoutWatcher) fire() {
 	w.pendingTimer = nil
 	w.mu.Unlock()
 
-	log.Printf("[ACK] timeout exceeded %s — CRITICAL → SAFE_MODE (session=%s)", w.timeout, sessionID)
+	svcLog.Event(logger.EventAckTimeout,
+		"ACK timeout — CRITICAL → SAFE_MODE",
+		"timeout", w.timeout, "session_id", sessionID, "vehicle_id", vehicleID)
+
+	// Write to audit store BEFORE state transition (ADR-018)
+	if w.auditWriter != nil {
+		sys, ctrl, _, _ := w.sm.Get()
+		if err := w.auditWriter.WriteSync(audit.SafetyAuditEvent{
+			EventID:     ulid.Generate(),
+			SessionID:   sessionID,
+			VehicleID:   vehicleID,
+			EventType:   logger.EventAckTimeout,
+			Reason:      "command ACK timeout — control loop budget exceeded",
+			SystemState: string(sys),
+			CtrlState:   string(ctrl),
+			Timestamp:   time.Now(),
+		}); err != nil {
+			svcLog.Error("audit write failed — proceeding to SAFE_MODE", "error", err)
+		}
+	}
+
 	w.sm.TransitionSystem(statemachine.StateSafeMode)
 	w.publisher.PublishEvent(safetyservice.SafetyEvent{
 		SessionID: sessionID,

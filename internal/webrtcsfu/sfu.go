@@ -4,11 +4,13 @@
 package webrtcsfu
 
 import (
-	"log"
 	"sync"
 
+	"avoc/pkg/logger"
 	"github.com/pion/webrtc/v4"
 )
+
+var svcLog = logger.New("webrtc-sfu")
 
 // SessionEventType mirrors the session event types from the Control Server (ADR-015).
 type SessionEventType string
@@ -42,16 +44,15 @@ type Peer struct {
 type SFU struct {
 	mu      sync.RWMutex
 	api     *webrtc.API
-	peers   map[string]*Peer    // keyed by peerID
-	routing map[string][]string // sessionID → operator peer IDs
+	peers   map[string]*Peer
+	routing map[string][]string      // sessionID → operator peer IDs
 	state   map[string]SessionEventType // sessionID → last event type
 }
 
 func New() *SFU {
-	// MediaEngine: enable VP8 + Opus (browser defaults)
 	m := &webrtc.MediaEngine{}
 	if err := m.RegisterDefaultCodecs(); err != nil {
-		log.Fatalf("[SFU] codec registration failed: %v", err)
+		svcLog.Fatal("SFU codec registration failed", "error", err)
 	}
 
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(m))
@@ -70,15 +71,14 @@ func (s *SFU) HandleSessionEvent(event SessionEvent) {
 	defer s.mu.Unlock()
 
 	s.state[event.SessionID] = event.Type
-	log.Printf("[SFU] session event: %s session=%s operator=%s",
-		event.Type, event.SessionID, event.OperatorID)
+	svcLog.Info("session event received",
+		"event_type", event.Type, "session_id", event.SessionID, "operator_id", event.OperatorID)
 
 	switch event.Type {
 	case EventCreated:
 		s.routing[event.SessionID] = []string{}
 
 	case EventOperatorAssigned, EventOperatorHandover:
-		// Track which operator(s) should receive the primary stream.
 		s.routing[event.SessionID] = []string{event.OperatorID}
 
 	case EventSafeMode:
@@ -93,7 +93,6 @@ func (s *SFU) HandleSessionEvent(event SessionEvent) {
 }
 
 // CreateVehicleOffer accepts a WebRTC offer from a vehicle and returns an SDP answer.
-// The vehicle's tracks are stored for forwarding to subscribed operators.
 func (s *SFU) CreateVehicleOffer(sessionID, peerID, sdpOffer string) (string, error) {
 	config := webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
@@ -107,13 +106,13 @@ func (s *SFU) CreateVehicleOffer(sessionID, peerID, sdpOffer string) (string, er
 	}
 
 	pc.OnTrack(func(track *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
-		log.Printf("[SFU] vehicle track: session=%s kind=%s codec=%s",
-			sessionID, track.Kind(), track.Codec().MimeType)
+		svcLog.Info("vehicle track received",
+			"session_id", sessionID, "kind", track.Kind(), "codec", track.Codec().MimeType)
 		go s.forwardTrack(sessionID, track)
 	})
 
 	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
-		log.Printf("[SFU] vehicle ICE: %s (session=%s)", state, sessionID)
+		svcLog.Info("vehicle ICE state changed", "state", state, "session_id", sessionID)
 		if state == webrtc.ICEConnectionStateFailed || state == webrtc.ICEConnectionStateDisconnected {
 			s.removePeer(peerID)
 		}
@@ -135,20 +134,19 @@ func (s *SFU) CreateVehicleOffer(sessionID, peerID, sdpOffer string) (string, er
 		return "", err
 	}
 
-	// Wait for ICE gathering to complete (simplified — production uses Trickle ICE)
 	gatherComplete := webrtc.GatheringCompletePromise(pc)
 	<-gatherComplete
 
 	s.mu.Lock()
 	s.peers[peerID] = &Peer{
-		ID:         peerID,
-		Role:       "vehicle",
-		SessionID:  sessionID,
+		ID:        peerID,
+		Role:      "vehicle",
+		SessionID: sessionID,
 		Connection: pc,
 	}
 	s.mu.Unlock()
 
-	log.Printf("[SFU] vehicle connected: peer=%s session=%s", peerID, sessionID)
+	svcLog.Info("vehicle peer connected", "peer_id", peerID, "session_id", sessionID)
 	return pc.LocalDescription().SDP, nil
 }
 
@@ -179,7 +177,7 @@ func (s *SFU) forwardTrack(sessionID string, track *webrtc.TrackRemote) {
 			}
 			for _, localTrack := range peer.Tracks {
 				if _, err := localTrack.Write(rtpBuf[:n]); err != nil {
-					log.Printf("[SFU] forward error to operator %s: %v", opID, err)
+					svcLog.Warn("track forward error", "operator_id", opID, "error", err)
 				}
 			}
 		}
@@ -191,13 +189,12 @@ func (s *SFU) dropStreams(sessionID string) {
 		if peer.SessionID == sessionID {
 			peer.Connection.Close()
 			delete(s.peers, id)
-			log.Printf("[SFU] dropped peer: %s (session=%s)", id, sessionID)
+			svcLog.Info("peer dropped", "peer_id", id, "session_id", sessionID)
 		}
 	}
 }
 
 // SubscribeOperator accepts a WebRTC offer from an operator browser and returns an SDP answer.
-// The operator's PeerConnection receives tracks forwarded from the vehicle (ADR-014).
 func (s *SFU) SubscribeOperator(sessionID, operatorID, sdpOffer string) (string, error) {
 	config := webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
@@ -210,7 +207,6 @@ func (s *SFU) SubscribeOperator(sessionID, operatorID, sdpOffer string) (string,
 		return "", err
 	}
 
-	// Create a local track so the SFU can forward vehicle RTP to this operator (ADR-014).
 	localTrack, err := webrtc.NewTrackLocalStaticRTP(
 		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8},
 		"video", "avoc-vehicle",
@@ -225,7 +221,8 @@ func (s *SFU) SubscribeOperator(sessionID, operatorID, sdpOffer string) (string,
 	}
 
 	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
-		log.Printf("[SFU] operator ICE: %s (session=%s operator=%s)", state, sessionID, operatorID)
+		svcLog.Info("operator ICE state changed",
+			"state", state, "session_id", sessionID, "operator_id", operatorID)
 		if state == webrtc.ICEConnectionStateFailed || state == webrtc.ICEConnectionStateDisconnected {
 			s.removePeer(operatorID)
 		}
@@ -258,19 +255,18 @@ func (s *SFU) SubscribeOperator(sessionID, operatorID, sdpOffer string) (string,
 		Connection: pc,
 		Tracks:     []*webrtc.TrackLocalStaticRTP{localTrack},
 	}
-	// Register this operator in the session routing table.
 	existing := s.routing[sessionID]
 	for _, id := range existing {
 		if id == operatorID {
 			s.mu.Unlock()
-			log.Printf("[SFU] operator already subscribed: %s", operatorID)
+			svcLog.Info("operator already subscribed", "operator_id", operatorID)
 			return pc.LocalDescription().SDP, nil
 		}
 	}
 	s.routing[sessionID] = append(existing, operatorID)
 	s.mu.Unlock()
 
-	log.Printf("[SFU] operator subscribed: peer=%s session=%s", operatorID, sessionID)
+	svcLog.Info("operator subscribed", "operator_id", operatorID, "session_id", sessionID)
 	return pc.LocalDescription().SDP, nil
 }
 

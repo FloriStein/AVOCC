@@ -2,12 +2,14 @@ package main
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"os"
 
 	"avoc/internal/safetyservice"
+	"avoc/pkg/logger"
 )
+
+var log = logger.New("safety-service")
 
 func main() {
 	port := os.Getenv("SAFETY_PORT")
@@ -18,8 +20,10 @@ func main() {
 	bus := safetyservice.NewBus()
 
 	bus.Subscribe(func(event safetyservice.SafetyEvent) {
-		log.Printf("[SAFETY] %s — session=%s vehicle=%s reason=%s",
-			event.Type, event.SessionID, event.VehicleID, event.Reason)
+		log.Event(string(event.Type), "safety event received",
+			"session_id", event.SessionID,
+			"vehicle_id", event.VehicleID,
+			"reason", event.Reason)
 	})
 
 	mux := http.NewServeMux()
@@ -59,8 +63,8 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "safety-service"})
 	})
 
-	log.Printf("Safety Service starting on :%s", port)
+	log.Info("Safety Service starting", "port", port)
 	if err := http.ListenAndServe(":"+port, mux); err != nil {
-		log.Fatalf("Safety Service failed: %v", err)
+		log.Fatal("Safety Service failed", "error", err)
 	}
 }

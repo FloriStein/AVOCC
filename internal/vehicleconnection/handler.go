@@ -3,16 +3,18 @@
 package vehicleconnection
 
 import (
-	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"avoc/internal/controlserver/statemachine"
 	"avoc/internal/safetyservice"
+	"avoc/pkg/logger"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 )
+
+var svcLog = logger.New("control-server")
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(_ *http.Request) bool { return true },
@@ -54,12 +56,12 @@ func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("[VEHICLE] WebSocket upgrade failed: %v", err)
+		svcLog.Error("vehicle WebSocket upgrade failed", "error", err)
 		return
 	}
 	defer conn.Close()
 
-	log.Printf("[VEHICLE] connected: id=%s", claims.Subject)
+	svcLog.Info("vehicle connected", "vehicle_id", claims.Subject)
 
 	go h.heartbeat(conn)
 	h.readLoop(conn, claims)
@@ -87,7 +89,8 @@ func (h *Handler) readLoop(conn *websocket.Conn, claims *vehicleClaims) {
 				VehicleID: claims.Subject,
 				Timestamp: time.Now(),
 			})
-			log.Printf("[VEHICLE] disconnected: VEHICLE_DISCONNECT → SAFE_MODE (id=%s)", claims.Subject)
+			svcLog.Event(logger.EventWsDisconnect,
+				"vehicle disconnected → SAFE_MODE", "vehicle_id", claims.Subject)
 		}
 	}()
 
@@ -101,7 +104,6 @@ func (h *Handler) readLoop(conn *websocket.Conn, claims *vehicleClaims) {
 		if err != nil {
 			return
 		}
-		// TODO BE-04: parse vehicle telemetry/status messages
 	}
 }
 

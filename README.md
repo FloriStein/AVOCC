@@ -31,6 +31,8 @@ docker compose -f infrastructure/compose/docker-compose.yml --env-file .env up -
 | http://localhost:8082 | Safety Service |
 | http://localhost:8083 | Telemetry Service |
 | http://localhost:8084 | WebRTC SFU |
+| http://localhost:3001 | Grafana (Log-Dashboard) |
+| http://localhost:3100 | Loki (Log-Aggregation API) |
 
 ---
 
@@ -179,7 +181,7 @@ docker compose -f tests/docker-compose.test.yml down
 
 ## Implementierungsstand
 
-**Phasen 1–6 abgeschlossen — 31/31 Tasks ✅ (Phase 7 Logging in Arbeit)**
+**Phasen 1–7 abgeschlossen — 42/42 Tasks ✅**
 
 | Feature | Implementiert |
 |---------|--------------|
@@ -196,7 +198,7 @@ docker compose -f tests/docker-compose.test.yml down
 
 **Sprint 6 (Testing & Quality Gates) ✅:** 31 Vitest Component-Tests · 9 Go Integration Tests · Go Benchmark + k6 Latenz-CI (<100ms Build-Fail) · README Troubleshooting · Playwright E2E Baseline
 
-**Offen (Sprint 7):** Logging — pkg/logger (slog), AuditWriter + SQLite, Loki + Grafana, Frontend logger.ts
+**Sprint 7 (Logging & Audit Trail) ✅:** pkg/logger (slog, JSON) · pkg/audit (SQLiteAuditWriter, WAL+fsync) · Loki + Grafana + Promtail · Frontend logger.ts · POST /log · GET /audit/events · AuditWriter.WriteSync() vor jeder SAFE_MODE-Transition
 
 ---
 
@@ -210,8 +212,9 @@ docker compose -f tests/docker-compose.test.yml down
 | Sprint 4 | Core Backend Services — Command Engine, MQTT, Recording, WebRTC SFU | ✅ |
 | Sprint 5 | Feature Completion Frontend — Control Panel, Video Panel, Dashboard, Telemetrie | ✅ |
 | Sprint 6 | Testing & Quality Gates — Vitest 31 Tests, Integration Tests, k6 Latenz-CI, README | ✅ |
+| Sprint 7 | Logging & Audit Trail — slog, SQLite AuditWriter, Loki + Grafana, Frontend logger.ts | ✅ |
 
-→ Aktueller Sprint: [tasks/current-sprint.md](tasks/current-sprint.md) | Backlog: [tasks/backlog.md](tasks/backlog.md)
+→ Abgeschlossen: alle 7 Sprints | Backlog: [tasks/backlog.md](tasks/backlog.md)
 
 ---
 

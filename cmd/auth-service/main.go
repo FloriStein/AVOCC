@@ -1,12 +1,14 @@
 package main
 
 import (
-	"log"
 	"net/http"
 	"os"
 
 	"avoc/internal/authservice"
+	"avoc/pkg/logger"
 )
+
+var log = logger.New("auth-service")
 
 func main() {
 	port := os.Getenv("AUTH_PORT")
@@ -29,8 +31,8 @@ func main() {
 	mux.HandleFunc("POST /auth/handover/token", handler.HandoverToken)
 	mux.HandleFunc("GET /health", handler.Health)
 
-	log.Printf("Auth Service starting on :%s", port)
+	log.Info("Auth Service starting", "port", port)
 	if err := http.ListenAndServe(":"+port, mux); err != nil {
-		log.Fatalf("Auth Service failed: %v", err)
+		log.Fatal("Auth Service failed", "error", err)
 	}
 }
