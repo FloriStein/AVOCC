@@ -25,12 +25,12 @@ Vorgänger: Sprint 7 ✅ (Logging & Audit Trail — slog, SQLite Audit Store, Lo
 | ID | Task | Typ | Status | Abhängigkeiten |
 |----|------|-----|--------|----------------|
 | DEPLOY-01 | ADR-019 — Deployment-Strategie dokumentieren | L | ✅ Done | — |
-| DEPLOY-02 | Makefile `build-prod` + `push` — linux/amd64, Docker Hub Tags | M | 🔲 Open | DEPLOY-01 |
-| DEPLOY-03 | `infrastructure/compose/docker-compose.prod.yml` — `image:` statt `build:` | M | 🔲 Open | DEPLOY-02 |
-| DEPLOY-04 | `scripts/setup-ssm.sh` + `scripts/deploy.sh` — SSM-Integration | M | 🔲 Open | DEPLOY-01 |
-| DEPLOY-05 | coturn EC2-Konfiguration — `external-ip` via `TURN_EXTERNAL_IP` | M | 🔲 Open | DEPLOY-01 |
-| DEPLOY-06 | Grafana Security — Login-Form + Admin-Credentials aus SSM | S | 🔲 Open | DEPLOY-03 |
-| DEPLOY-07 | EC2 Bootstrap Guide — Checkliste für ersten Deploy ab null | M | 🔲 Open | DEPLOY-03, DEPLOY-04, DEPLOY-05 |
+| DEPLOY-02 | Makefile `build-prod` + `push` — linux/amd64, Docker Hub Tags | M | ✅ Done | DEPLOY-01 |
+| DEPLOY-03 | `infrastructure/compose/docker-compose.prod.yml` — `image:` statt `build:` | M | ✅ Done | DEPLOY-02 |
+| DEPLOY-04 | `scripts/setup-ssm.sh` + `scripts/deploy.sh` — SSM-Integration | M | ✅ Done | DEPLOY-01 |
+| DEPLOY-05 | coturn EC2-Konfiguration — `external-ip` via `TURN_EXTERNAL_IP` | M | ✅ Done | DEPLOY-01 |
+| DEPLOY-06 | Grafana Security — Login-Form + Admin-Credentials aus SSM | S | ✅ Done | DEPLOY-03 |
+| DEPLOY-07 | EC2 Bootstrap Guide — Checkliste für ersten Deploy ab null | M | ✅ Done | DEPLOY-03, DEPLOY-04, DEPLOY-05 |
 
 ---
 
@@ -226,11 +226,11 @@ läuft), `setup-ssm.sh` ausführen, deploy.sh auf EC2 kopieren, erster Deploy.
 
 ## Sprint-Ziel / Definition of Done
 
-- [ ] ADR-019 dokumentiert ✅
-- [ ] `make push` baut alle 6 Images für `linux/amd64` und pushed nach Docker Hub
-- [ ] `docker-compose.prod.yml` läuft auf EC2 ohne Quellcode (`image:` statt `build:`)
-- [ ] `scripts/deploy.sh` holt Secrets aus SSM — kein `.env` auf der Instanz
-- [ ] coturn kennt die Elastic IP (`--external-ip` gesetzt), TURN relay funktioniert
-- [ ] Grafana Login-Formular aktiv, kein Anonymous-Admin
-- [ ] EC2 Bootstrap Guide vollständig — System ab null deploybar
-- [ ] Safety Regression: 19/19 grün ✅ (kein Rückschritt durch Deployment-Änderungen)
+- [x] ADR-019 dokumentiert (`docs/adr/019-deployment-strategy.md`)
+- [x] `make push` baut alle 6 Images für `linux/amd64` und pushed nach Docker Hub
+- [x] `docker-compose.prod.yml` — `image:` statt `build:`, YAML validiert
+- [x] `scripts/deploy.sh` holt Secrets aus SSM — kein `.env` auf der Instanz
+- [x] coturn `--external-ip=${TURN_EXTERNAL_IP}` als Command-Flag, Port-Range 49160-49200
+- [x] Grafana Login-Formular aktiv, `GF_AUTH_ANONYMOUS_ENABLED: false`
+- [x] EC2 Bootstrap Guide vollständig (`docs/deployment/ec2-bootstrap.md`)
+- [x] Safety Regression: 19/19 ✅ (kein Go-Code geändert in Sprint 8)

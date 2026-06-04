@@ -1,4 +1,12 @@
-.PHONY: proto-gen proto-gen-ts build up down test test-safety test-integration test-latency test-k6 lint clean
+.PHONY: proto-gen proto-gen-ts build up down test test-safety test-integration test-latency test-k6 lint clean build-prod push
+
+# ─── Docker Hub / EC2 Deployment (ADR-019) ────────────────────────────────────
+# Set DOCKER_USERNAME via env or create a local .docker-username file (gitignored)
+DOCKER_USERNAME ?= $(shell cat .docker-username 2>/dev/null)
+REGISTRY        := docker.io/$(DOCKER_USERNAME)
+VERSION         ?= latest
+PLATFORM        := linux/amd64
+GO_SERVICES     := control-server auth-service safety-service telemetry-service webrtc-sfu
 
 # Proto code generation (Go + TypeScript)
 proto-gen:
@@ -84,6 +92,33 @@ test-k6:
 	EXIT=$$?; \
 	docker compose -f tests/docker-compose.test.yml down; \
 	exit $$EXIT
+
+# Build all images for linux/amd64 and tag for Docker Hub (ADR-019)
+build-prod:
+	@test -n "$(DOCKER_USERNAME)" || \
+		(echo "ERROR: DOCKER_USERNAME not set. Run: export DOCKER_USERNAME=yourname  or  echo yourname > .docker-username" && exit 1)
+	@echo "[build-prod] Registry: $(REGISTRY)  Platform: $(PLATFORM)  Version: $(VERSION)"
+	@for svc in $(GO_SERVICES); do \
+		echo "  → avoc-$$svc"; \
+		docker buildx build --platform $(PLATFORM) \
+			--build-arg SERVICE_NAME=$$svc \
+			-t $(REGISTRY)/avoc-$$svc:$(VERSION) \
+			-f infrastructure/docker/go-service.Dockerfile . --load; \
+	done
+	@echo "  → avoc-frontend"
+	@docker buildx build --platform $(PLATFORM) \
+		-t $(REGISTRY)/avoc-frontend:$(VERSION) \
+		-f infrastructure/docker/frontend.Dockerfile . --load
+	@echo "[build-prod] Done — 6 images built for $(PLATFORM)."
+
+# Push all images to Docker Hub (runs build-prod first)
+push: build-prod
+	@echo "[push] Pushing to $(REGISTRY)..."
+	@for svc in $(GO_SERVICES); do \
+		docker push $(REGISTRY)/avoc-$$svc:$(VERSION); \
+	done
+	@docker push $(REGISTRY)/avoc-frontend:$(VERSION)
+	@echo "[push] Done. Deploy on EC2: bash scripts/deploy.sh"
 
 # Lint
 lint:
