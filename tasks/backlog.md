@@ -53,17 +53,17 @@ Stand: 2026-06-03 — aktualisiert nach Sprint 1/2/3/4/5 + ADR-017 (Logging)
 
 | ID | Task | Typ | Abhängigkeiten | Notizen |
 |----|------|-----|----------------|---------|
-| DC-04 | Local Dev Environment — README finalisieren | S | DC-03 ✅ | README.md Grundstruktur vorhanden ✅; `make proto-gen-ts` vorhanden ✅; fehlt: Troubleshooting-Abschnitt (WSL, Docker-Socket, Port-Konflikte), Contributor-Guide |
+| DC-04 | Local Dev Environment — README finalisieren | S | ✅ Sprint 6 | Troubleshooting (6 Szenarien), Contributor Guide (5 Abschnitte), alle Makefile-Befehle |
 
 ---
 
 ## EPIC: Testing
 
-| ID | Task | Typ | Abhängigkeiten | Notizen |
-|----|------|-----|----------------|---------|
-| TEST-03 | Integration Test Infrastructure — Docker Test Environment | M | DC-03 ✅ | ADR-006; Docker Compose für Tests; Playwright WebRTC-Flags (`--allow-insecure-localhost`); Basis für TEST-05 |
-| TEST-04 | Frontend Test Infrastructure — Vitest + RTL + Playwright | M | FE-01 ✅ | ADR-006; **Vitest statt Jest** (ESM-kompatibel mit Vite); erste Component-Tests für `SafetyPanel`, `ConnectionPanel`, `SafeModeOverlay`; Playwright E2E-Basis |
-| TEST-05 | Performance / Latency Tests — CI Integration (<100ms) | M | BE-02 ✅, BE-04 ✅, TEST-03 | ADR-006; k6 + Go Benchmarks; ACK-Roundtrip <100ms mit echtem Protobuf ControlAck (BE-04 ist fertig); Build-Fail bei Verletzung |
+| ID | Task | Typ | Status | Ergebnis |
+|----|------|-----|--------|----------|
+| TEST-03 | Integration Test Infrastructure — Docker Test Environment | M | ✅ Sprint 6 | docker-compose.test.yml, 9 Go Integration Tests, make test-integration |
+| TEST-04 | Frontend Test Infrastructure — Vitest + RTL + Playwright | M | ✅ Sprint 6 | 31/31 Vitest Tests grün, playwright.config.ts, E2E Baseline |
+| TEST-05 | Performance / Latency Tests — CI Integration (<100ms) | M | ✅ Sprint 6 | Go Benchmark p99=0ms, k6 p99=244µs, make test-latency + make test-k6 |
 
 ---
 

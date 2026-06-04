@@ -1,4 +1,4 @@
-.PHONY: proto-gen build up down test lint clean
+.PHONY: proto-gen proto-gen-ts build up down test test-safety test-integration test-latency test-k6 lint clean
 
 # Proto code generation (Go + TypeScript)
 proto-gen:
@@ -42,17 +42,48 @@ up:
 down:
 	docker compose -f infrastructure/compose/docker-compose.yml --env-file .env down
 
-# Run all tests
+# Run all Go tests (unit + integration if stack is up)
 test:
 	go test ./...
 
-# Run safety test suite only
+# Run safety test suite only (CI safety gate — must stay 19/19 green)
 test-safety:
 	go test ./tests/unit/... -v -run Safety
 
-# Run latency tests
+# Start test stack, run Go integration tests, stop stack
+test-integration:
+	@echo "Starting test stack..."
+	docker compose -f tests/docker-compose.test.yml up --build -d
+	@echo "Waiting for services..."
+	@sleep 5
+	@echo "Running integration tests..."
+	go test ./tests/integration/... -v -timeout 120s; \
+	EXIT=$$?; \
+	docker compose -f tests/docker-compose.test.yml down; \
+	exit $$EXIT
+
+# Go benchmark: ACK-Roundtrip latency (requires test stack running)
+# Build-Fail when p99 > 100ms (ADR-006/010)
 test-latency:
-	k6 run tests/integration/latency.js
+	@echo "Starting test stack for latency measurement..."
+	docker compose -f tests/docker-compose.test.yml up --build -d
+	@sleep 5
+	@echo "Running Go latency benchmark..."
+	go test ./tests/performance/... -bench=BenchmarkControlACKRoundtrip \
+		-benchtime=10s -run=^$$ -v | tee /tmp/bench_out.txt; \
+	EXIT=$$?; \
+	docker compose -f tests/docker-compose.test.yml down; \
+	exit $$EXIT
+
+# k6 load test (requires k6 or Docker)
+test-k6:
+	@echo "Starting test stack for k6..."
+	docker compose -f tests/docker-compose.test.yml up --build -d
+	@sleep 5
+	docker run --rm --network host grafana/k6 run - < tests/performance/latency.js; \
+	EXIT=$$?; \
+	docker compose -f tests/docker-compose.test.yml down; \
+	exit $$EXIT
 
 # Lint
 lint:

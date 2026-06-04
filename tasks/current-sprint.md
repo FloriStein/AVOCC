@@ -1,25 +1,22 @@
-# Sprint 6 — Testing & Quality Gates
+# Sprint 7 — Logging & Audit Trail
 
-Ziel: Vollständige Test-Infrastruktur. CI läuft durch. Latenz-Ziel <100ms automatisch verifiziert. README produktionsreif.
+Ziel: Vollständig strukturiertes Logging. Safety Events garantiert persistent. Grafana-Dashboard für Session-Rekonstruktion.
 
 Datum: 2026-06-04
-Vorgänger: Sprint 5 ✅ (Feature Completion Frontend)
+Vorgänger: Sprint 6 ✅ (Testing & Quality Gates — 31 Vitest Tests, 9 Integration Tests, k6 Latenz-CI)
 
 ---
 
-## Ausgangslage (aus Sprint 5)
+## Ausgangslage (aus Sprint 6)
 
 | Was existiert | Stand |
 |---------------|-------|
-| Safety Test Suite | 19/19 grün (Sprint 2) — Basis für Regression |
-| Protobuf ControlAck | Echter Binary-ACK (BE-04) — k6-Latenz jetzt messbar |
-| `docker-compose.yml` | Alle 8 Services (inkl. SFU, coturn, MQTT) — Basis für TEST-03 |
-| `frontend/src/gen/*.ts` | protoc-gen-es v2 generiert — Vitest-Tests compilieren lokal |
-| `vite.config.ts` | `/sfu/` + `/telemetry/` Proxy ergänzt (Sprint 5) |
-| ADR-017/018 | Logging-Strategie entschieden — **LOG-Tasks sind Phase 7, nicht Sprint 6** |
-| Deadman | Armed-Pattern + 10s Timeout (Sprint 5 Bugfix) — Safety-Tests aktualisiert |
-
-**Wichtig:** Sprint 6 ist rein Testing & Quality Gates. Phase 7 (Logging, LOG-01..11) folgt als Sprint 7.
+| `make test-integration` | Test-Stack startet/stoppt automatisch — LOG-Tests können ihn nutzen |
+| `make test-safety` | Safety Gate 19/19 — Regression-Basis für LOG-11 (AuditWriter Integration) |
+| `pkg/ulid/` | ULID-Wrapper vorhanden — AuditWriter nutzt ihn für event_id |
+| Alle Services nutzen `log.Printf` | Wird in LOG-02..06 auf strukturierten Logger migriert |
+| ADR-017/018 | Architekturentscheidungen vollständig — kein offener Klärungsbedarf |
+| `modernc.org/sqlite` | Noch nicht in go.mod — wird in LOG-10 ergänzt |
 
 ---
 
@@ -27,251 +24,229 @@ Vorgänger: Sprint 5 ✅ (Feature Completion Frontend)
 
 | ID | Task | Typ | Status | Abhängigkeiten |
 |----|------|-----|--------|----------------|
-| TEST-03 | Integration Test Docker Environment | M | 🔲 Todo | DC-03 ✅ |
-| TEST-04 | Frontend Tests — Vitest + RTL + Playwright E2E | M | 🔲 Todo | FE-01 ✅, gen/ ✅ |
-| TEST-05 | Latenz-Tests CI — k6 + Go Benchmark (<100ms Build-Fail) | M | 🔲 Todo | BE-02 ✅, BE-04 ✅, TEST-03 |
-| DC-04 | README — Troubleshooting + Contributor Guide | S | 🔲 Todo | DC-03 ✅ |
+| LOG-01 | `pkg/logger/` — strukturierter slog-Wrapper | M | 🔲 Todo | — |
+| LOG-02 | Control Server Migration | M | 🔲 Todo | LOG-01 |
+| LOG-03 | Auth Service Migration | S | 🔲 Todo | LOG-01 |
+| LOG-04 | Safety Service Migration | S | 🔲 Todo | LOG-01 |
+| LOG-05 | Telemetry Service Migration | S | 🔲 Todo | LOG-01 |
+| LOG-06 | WebRTC SFU Migration | S | 🔲 Todo | LOG-01 |
+| LOG-07 | `POST /log` Endpoint — Frontend Log-Ingestion | M | 🔲 Todo | LOG-02 |
+| LOG-08 | Frontend `logger.ts` + Integration | M | 🔲 Todo | LOG-07 |
+| LOG-09 | Loki + Grafana + Promtail Docker Compose | M | 🔲 Todo | LOG-01 |
+| LOG-10 | `pkg/audit/` — AuditWriter Interface + SQLiteAuditWriter | M | 🔲 Todo | LOG-01 |
+| LOG-11 | Control Server Safety-Event-Integration | M | 🔲 Todo | LOG-10, LOG-02 |
 
 ---
 
 ## Abhängigkeitspfad
 
 ```
-TEST-03 (Docker Test Env) ──────────────────────┐
-TEST-04 (Frontend Tests)  — parallel zu TEST-03 ─┼→ TEST-05 (CI Latenz) ✓
-DC-04   (README)          — unabhängig           ┘
+LOG-01 → LOG-02..06 (parallel) → LOG-07 → LOG-08
+       ↘
+        LOG-09 (parallel zu allem)
+       ↘
+        LOG-10 → LOG-11 (nach LOG-02)
 ```
 
 ---
 
 ## Implementierungsdetails je Task
 
-### TEST-03 — Integration Test Docker Environment
+### LOG-01 — `pkg/logger/` slog-Wrapper
 
-**Neue Datei:** `tests/docker-compose.test.yml`
+**Neue Dateien:** `pkg/logger/logger.go`, `pkg/logger/event_types.go`
 
-Minimaler Stack für Integration Tests (ohne WebRTC/coturn — zu flaky in CI per ADR-006):
-
-```yaml
-services:
-  control-server:   # Port 8080
-  auth-service:     # Port 8081
-  safety-service:   # Port 8082
-  mosquitto:        # Port 1883
-```
-
-**Health-Check-Script:** `tests/integration/health_test.sh`
-- Alle Services antworten auf `/health` → HTTP 200
-- `docker compose -f tests/docker-compose.test.yml up -d && ./health_test.sh`
-
-**`Makefile`-Target:**
-```makefile
-test-integration:
-    docker compose -f tests/docker-compose.test.yml up -d
-    sleep 3
-    go test ./tests/integration/... -v -timeout 60s
-    docker compose -f tests/docker-compose.test.yml down
-```
-
-**Playwright-Flags** (für spätere E2E mit WebRTC):
-```
---allow-insecure-localhost
---use-fake-ui-for-media-stream
---use-fake-device-for-media-stream
-```
-→ In `tests/playwright.config.ts` als `launchOptions` hinterlegen.
-
----
-
-### TEST-04 — Frontend Tests: Vitest + RTL + Playwright
-
-**Packages installieren:**
-```bash
-cd frontend
-npm install --save-dev vitest @vitest/coverage-v8 \
-  @testing-library/react @testing-library/user-event \
-  @testing-library/jest-dom jsdom \
-  @playwright/test
-```
-
-**`frontend/vitest.config.ts`:**
-```typescript
-import { defineConfig } from 'vitest/config'
-import react from '@vitejs/plugin-react'
-import path from 'path'
-
-export default defineConfig({
-  plugins: [react()],
-  test: {
-    environment: 'jsdom',
-    globals: true,
-    setupFiles: ['./src/test/setup.ts'],
-  },
-  resolve: { alias: { '@': path.resolve(__dirname, './src') } },
-})
-```
-
-**`frontend/src/test/setup.ts`:**
-```typescript
-import '@testing-library/jest-dom'
-```
-
-**`package.json` Scripts ergänzen:**
-```json
-"test": "vitest run",
-"test:watch": "vitest",
-"test:coverage": "vitest run --coverage",
-"test:e2e": "playwright test"
-```
-
-**Component-Tests (Priorität):**
-
-| Datei | Tests |
-|-------|-------|
-| `SafetyPanel.test.tsx` | E-Stop-Button disabled wenn SAFE_MODE; Deadman-Button visible wenn CONNECTED |
-| `ConnectionPanel.test.tsx` | Latenz-Farbe: grün <50ms, gelb <100ms, rot ≥100ms; Session-ID Truncation |
-| `SafeModeOverlay.test.tsx` | Overlay rendered wenn SAFE_MODE; Resume-Button ruft onResume auf |
-| `ControlPanel.test.tsx` | Panel disabled wenn !enabled (opacity-40 + pointer-events-none) |
-| `VideoPanel.test.tsx` | MEDIA_FAILED Overlay zeigt Retry-Button; MEDIA_CONNECTED zeigt kein Overlay |
-
-**Playwright E2E — Baseline:**
-```typescript
-// tests/e2e/dashboard.spec.ts
-test('Dashboard lädt und zeigt SYSTEM STATE', async ({ page }) => {
-  await page.goto('http://localhost:3000')
-  await expect(page.locator('text=AVOC')).toBeVisible()
-  await expect(page.locator('text=IDLE')).toBeVisible()
-})
-```
-
----
-
-### TEST-05 — Latenz-Tests CI (<100ms Build-Fail)
-
-#### Go Benchmark
-
-**`tests/performance/latency_test.go`:**
+**API:**
 ```go
-// BenchmarkControlACKRoundtrip misst den ACK-Roundtrip für einen Protobuf ControlCommand.
-// CI Build-Fail wenn p99 > 100ms (ADR-006/010).
-func BenchmarkControlACKRoundtrip(b *testing.B) {
-    // Verbindet zu laufendem Control Server (TEST-03 Stack vorausgesetzt)
-    // Sendet DEADMAN_HOLD → misst Zeit bis ACK
-    // b.ReportMetric(p99Ms, "p99_ms")
-}
+// Erstellt Logger für einen Service
+log := logger.New("control-server")
+
+// Technical Log (async → stdout → Loki)
+log.Info("WebSocket connected", "subject", "op-1", "role", "ACTIVE_OPERATOR")
+
+// Structured Safety/Audit Event (mit session-Kontext)
+log.Event(ctx, logger.EventEmergencyStop,
+    "Emergency Stop received",
+    "session_id", sessionID,
+    "vehicle_id", vehicleID,
+    "operator_id", operatorID,
+    "event_id", ulid.Generate(),
+)
 ```
 
-**`Makefile`-Target:**
-```makefile
-test-latency: ## Latenz-Tests gegen laufenden Stack (Build-Fail bei >100ms p99)
-    docker compose -f tests/docker-compose.test.yml up -d
-    sleep 3
-    go test ./tests/performance/... -bench=. -benchtime=10s -run=^$$ | \
-      tee /tmp/bench_out.txt
-    @grep p99_ms /tmp/bench_out.txt | \
-      awk '{ if ($$NF > 100) { print "FAIL: p99=" $$NF "ms > 100ms Budget"; exit 1 } \
-             else { print "PASS: p99=" $$NF "ms" } }'
+**`event_types.go`:** alle Event-Types aus ADR-017 als typisierte Konstanten
+```go
+const (
+    EventSessionStarted     = "SESSION_STARTED"
+    EventSessionEnded       = "SESSION_ENDED"
+    EventSafeModeEntered    = "SAFE_MODE_ENTERED"
+    EventEmergencyStop      = "EMERGENCY_STOP"
+    EventDeadmanTimeout     = "DEADMAN_TIMEOUT"
+    EventDeadmanArmed       = "DEADMAN_ARMED"
+    EventAckTimeout         = "COMMAND_ACK_TIMEOUT"
+    EventWsDisconnect       = "WS_DISCONNECT_CRITICAL"
+    EventOperatorHandover   = "OPERATOR_HANDOVER_COMPLETED"
+    EventStateTransition    = "STATE_TRANSITION_SYSTEM"
+    EventCommandReceived    = "COMMAND_RECEIVED"
+    EventMediaStateChange   = "MEDIA_STATE_CHANGE"
+    // Frontend events
+    EventFEEmergencyStop    = "FE_EMERGENCY_STOP_CLICKED"
+    EventFEDeadmanHold      = "FE_DEADMAN_HOLD"
+    EventFEWebRTCState      = "FE_WEBRTC_STATE_CHANGE"
+    EventFEWSReconnect      = "FE_WS_RECONNECT"
+    EventFEOperatorAck      = "FE_OPERATOR_ACK_CLICKED"
+)
 ```
 
-#### k6 Load Test
+**Level per ENV:** `LOG_LEVEL=debug|info|warn|error` (default: `info`)
 
-**`tests/performance/latency.js`:**
-```javascript
-// k6-Script: 100 VU, 30s, ACK-Roundtrip via WebSocket
-// Threshold: p(99) < 100ms
-export const options = {
-  vus: 100,
-  duration: '30s',
-  thresholds: { 'ws_session_duration': ['p(99)<100'] },
-}
-```
+---
 
-**`Makefile`-Target:**
-```makefile
-test-k6:
-    docker compose -f tests/docker-compose.test.yml up -d
-    sleep 3
-    k6 run tests/performance/latency.js
-```
+### LOG-02..06 — Service-Migrationen
 
-**Hinweis:** k6 muss lokal installiert sein oder via Docker Image laufen:
-```bash
-docker run --rm -i grafana/k6 run - < tests/performance/latency.js
+Alle `log.Printf("[TAG] message")` Calls → `log.Event()` oder `log.Info/Warn/Error()`.
+
+| Service | Haupt-Events |
+|---------|-------------|
+| **control-server** | SESSION_STARTED/ENDED, STATE_TRANSITION_*, SAFE_MODE_ENTERED, EMERGENCY_STOP, DEADMAN_ARMED/TIMEOUT, ACK_TIMEOUT, WS_DISCONNECT, COMMAND_RECEIVED |
+| **auth-service** | Service-Start, Login, Token-Ausstellung, Fehler |
+| **safety-service** | EmergencyStop-Event, Bus-Events |
+| **telemetry-service** | MQTT connect/disconnect, MESSAGE_RECEIVED |
+| **webrtc-sfu** | Session-Events (SESSION_CREATED..ENDED), ICE-State-Changes |
+
+---
+
+### LOG-07 — `POST /log` Endpoint
+
+**Control Server** erhält Frontend-Logs:
+```go
+// cmd/control-server/main.go
+mux.HandleFunc("POST /log", func(w http.ResponseWriter, r *http.Request) {
+    var entry struct {
+        Level     string         `json:"level"`
+        EventType string         `json:"event_type"`
+        SessionID string         `json:"session_id"`
+        VehicleID string         `json:"vehicle_id"`
+        OperatorID string        `json:"operator_id"`
+        EventID   string         `json:"event_id"`
+        Message   string         `json:"msg"`
+        Data      map[string]any `json:"data,omitempty"`
+    }
+    // Validiert session_id wenn vorhanden, loggt mit service="frontend"
+})
 ```
 
 ---
 
-### DC-04 — README: Troubleshooting + Contributor Guide
+### LOG-08 — Frontend `logger.ts`
 
-**Abschnitte die fehlen:**
+**Neue Datei:** `frontend/src/lib/logger.ts`
 
-#### Troubleshooting
-
-```markdown
-## Troubleshooting
-
-### 502 Bad Gateway nach Container-Rebuild
-nginx cached Docker-IPs beim Start. Fix:
-  docker exec avoc-frontend-1 nginx -s reload
-
-### npm run dev: cannot find @/gen/control_pb.js
-Proto-Dateien fehlen. Fix (einmalig nach git clone):
-  make proto-gen-ts
-Ursache: src/gen/ ist gitignored — wird build-time generiert.
-
-### npm run dev: @rollup/rollup-linux-x64-gnu fehlt
-node_modules wurde in Docker (Alpine/musl) installiert. Fix:
-  # Mit Docker löschen (root-owned):
-  docker run --rm -v $(PWD)/frontend:/app -w /app node:22-alpine sh -c 'rm -rf node_modules package-lock.json'
-  cd frontend && npm install
-
-### Port-Konflikte
-  lsof -i :3000   # Frontend
-  lsof -i :8080   # Control Server
-  lsof -i :8084   # WebRTC SFU
-
-### WSL2: Services nicht erreichbar
-Hostname in vite.config.ts und .env auf WSL2-IP setzen:
-  hostname -I | awk '{print $1}'
+```typescript
+// Sendet strukturierte Log-Events an Control Server (POST /api/log)
+export function logEvent(
+  eventType: string,
+  msg: string,
+  context: { sessionId?: string; vehicleId?: string; operatorId?: string; data?: Record<string, unknown> }
+): void
 ```
 
-#### Contributor Guide
+**Integration in:** useDeadmanSwitch, SafetyPanel (E-Stop), useWebRTC, useSession (WS-Reconnect), SafeModeOverlay (Operator-Ack).
 
-```markdown
-## Contributor Guide
+---
 
-### Neue ADR erstellen
-1. Kopiere docs/adr/000-template.md → docs/adr/0XX-titel.md
-2. Fülle alle Pflichtfelder aus (Kontext, Optionen, Entscheidung, Konsequenzen)
-3. Trage ADR in DECISIONS.MD + docs/adr/README.md ein
-4. Aktualisiere implementation-plan.md ADR-Index
+### LOG-09 — Loki + Grafana + Promtail
 
-### Neuen Go-Service hinzufügen
-1. Erstelle cmd/<service-name>/main.go
-2. Erstelle infrastructure/docker/go-service.Dockerfile (wiederverwendbar)
-3. Ergänze Service in docker-compose.yml
-4. Füge /health Endpoint hinzu
-
-### Proto-Schema ändern
-→ Field-based Versioning (ADR-012): keine Field-IDs ändern, keine Felder entfernen
-1. Ändere proto/*.proto
-2. make proto-gen      # Go
-3. make proto-gen-ts   # TypeScript
-4. gen/ ist gitignored — nie committen
+**Neue Infrastruktur:**
 ```
+infrastructure/
+├── loki/
+│   └── loki.yml              # Loki v3 Config (filesystem storage, TTL 30d)
+├── promtail/
+│   └── promtail.yml          # Docker Service Discovery, JSON Pipeline
+└── grafana/
+    └── provisioning/
+        ├── datasources/loki.yml   # Loki DataSource auto-provision
+        └── dashboards/
+            ├── dashboards.yml
+            └── avoc.json          # AVOC Session Dashboard
+```
+
+**docker-compose.yml Erweiterung:**
+```yaml
+loki:      # Port 3100
+grafana:   # Port 3001 (3000 ist Frontend)
+promtail:  # kein Port (liest Docker-Logs)
+```
+
+**Promtail Pipeline** extrahiert `session_id`, `event_type`, `level` als Labels.
+
+---
+
+### LOG-10 — `pkg/audit/` AuditWriter + SQLiteAuditWriter
+
+**Neue Dateien:** `pkg/audit/writer.go`, `pkg/audit/sqlite_writer.go`, `pkg/audit/noop_writer.go`
+
+**Schema:**
+```sql
+CREATE TABLE audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT NOT NULL UNIQUE,
+    session_id TEXT NOT NULL,
+    vehicle_id TEXT NOT NULL,
+    operator_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    reason TEXT,
+    system_state TEXT,
+    ctrl_state TEXT,
+    data TEXT,            -- JSON
+    timestamp TEXT NOT NULL,
+    written_at TEXT NOT NULL
+);
+CREATE INDEX idx_session ON audit_events(session_id);
+CREATE INDEX idx_event_type ON audit_events(event_type);
+```
+
+**Storage:** `/data/audit/avoc_audit.db` — Docker Volume `audit-data`.
+
+---
+
+### LOG-11 — Control Server Safety-Event-Integration
+
+Alle Safety-Trigger schreiben synchron via `AuditWriter.WriteSync()` **vor** SAFE_MODE-Transition:
+
+```go
+// In detector.go fire():
+auditEvent := audit.SafetyAuditEvent{
+    EventID:     ulid.Generate(),
+    SessionID:   w.sessionID,
+    EventType:   logger.EventDeadmanTimeout,
+    Reason:      "dead-man switch timeout",
+    SystemState: "CONNECTED",
+    Timestamp:   time.Now(),
+}
+if err := w.auditWriter.WriteSync(auditEvent); err != nil {
+    // Schreibfehler = CRITICAL → trotzdem SAFE_MODE
+    log.Error("audit write failed", "error", err)
+}
+// DANN erst SAFE_MODE-Transition
+w.sm.TransitionSystem(statemachine.StateSafeMode)
+```
+
+**Query-Endpoint:** `GET /audit/events?session_id=<ulid>` → JSON-Array der Safety-Events.
 
 ---
 
 ## Sprint-Ziel / Definition of Done
 
-- [ ] `tests/docker-compose.test.yml` startet minimal Stack (control-server, auth, safety, mosquitto)
-- [ ] `make test-integration` — alle Services healthy, Go Integration Tests grün
-- [ ] `npm run test` — alle Vitest Component-Tests grün (≥5 Test-Files, SafetyPanel, ConnectionPanel, SafeModeOverlay, ControlPanel, VideoPanel)
-- [ ] Playwright E2E: Dashboard öffnet, AVOC-Header sichtbar, IDLE-State angezeigt
-- [ ] Go Benchmark (`tests/performance/`) misst ACK-Roundtrip
-- [ ] k6 Latenz-Test dokumentiert: 100 VU, 30s, p99 < 100ms gegen laufenden Stack
-- [ ] `make test-latency` schlägt fehl wenn p99 > 100ms (Build-Fail dokumentiert)
-- [ ] README Troubleshooting: 502-Fix, proto-gen-ts, rollup-Fix, Port-Konflikte, WSL2
-- [ ] README Contributor Guide: ADR-Prozess, neuer Service, Proto-Änderungen
+- [ ] `pkg/logger/logger.go` — `logger.New()`, `Event()`, Level-Konfiguration per `LOG_LEVEL` ENV
+- [ ] Alle `log.Printf` in 6 Go-Services migriert → strukturiertes JSON auf stdout
+- [ ] `POST /log` Endpunkt am Control Server — Frontend-Logs landen mit `service="frontend"`
+- [ ] `frontend/src/lib/logger.ts` — Events für E-Stop, Deadman, WebRTC, WS-Reconnect, Operator-Ack
+- [ ] Loki + Grafana + Promtail laufen in `docker-compose up` (Ports 3100, 3001)
+- [ ] LogQL `{service="control-server"} | json | event_type="EMERGENCY_STOP"` liefert Treffer
+- [ ] `pkg/audit/` — AuditWriter Interface + SQLiteAuditWriter + NoopWriter (Tests)
+- [ ] Safety Events werden synchron in SQLite geschrieben bevor SAFE_MODE-Transition
+- [ ] `GET /audit/events?session_id=<ulid>` liefert JSON-Array
 - [ ] Safety Regression: weiterhin 19/19 grün
-- [ ] `docker-compose up --build` — alle Services healthy nach Sprint-6-Änderungen
+- [ ] `docker-compose up --build` — alle 11 Services (inkl. Loki, Grafana) healthy

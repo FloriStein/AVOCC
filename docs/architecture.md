@@ -214,7 +214,7 @@ Ein Service, 5 logische Module:
 | **Safety Panel** | `SafetyPanel.tsx` + `useDeadmanSwitch.ts` — Emergency Stop, Dead-man Switch (Spacebar/Button), SAFE MODE Indikator | Sprint 3 ✅ |
 | **Connection Status Panel** | `ConnectionPanel.tsx` — SYSTEM STATE, Latenzanzeige, Session-ID (ULID), Operator-Rolle, Speed/Battery (Telemetrie) | Sprint 3/5 ✅ |
 | **SAFE MODE Overlay** | `SafeModeOverlay.tsx` — Fullscreen-Block, Operator-Ack-Button für Recovery | Sprint 3 ✅ |
-| **Operator Panel** | Handover-Anfrage, Observer-Liste | Phase 6 (geplant) |
+| **Operator Panel** | Handover-Anfrage, Observer-Liste | nicht implementiert (kein eigener Sprint geplant) |
 
 ---
 

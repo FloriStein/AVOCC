@@ -1,13 +1,13 @@
 # Implementation Plan — Teleoperation System
 
 Stand: 2026-06-03
-Status: Phase 1/2/3/4/5 abgeschlossen ✅ — Phase 6/7 offen (18 ADRs — ADR-017/018 nach Grill-Me ergänzt)
+Status: Phase 1/2/3/4/5/6 abgeschlossen ✅ — Phase 7 offen (18 ADRs — ADR-017/018 nach Grill-Me ergänzt)
 
 ---
 
 ## 1. Executive Summary
 
-Wir bauen ein sicheres, modulares Echtzeit-Teleoperation-System zur Fernsteuerung von Fahrzeugen über das offene Internet (Vehicle ↔ Internet ↔ OCC, uncontrolled routing). Die Architektur ist durch 18 ADRs entschieden. Die Implementierung startete mit einem stabilen Fundament (Proto-Schema, Auth, Safety Event Bus, Control Server) und ist nach 5 Sprints mit vollständigem Frontend, Backend und Video-Channel produktionsbereit. Sprint 6 schließt Testing & Quality Gates ab, Phase 7 integriert das Logging-System (ADR-017/018).
+Wir bauen ein sicheres, modulares Echtzeit-Teleoperation-System zur Fernsteuerung von Fahrzeugen über das offene Internet (Vehicle ↔ Internet ↔ OCC, uncontrolled routing). Die Architektur ist durch 18 ADRs entschieden. Nach 6 Sprints sind vollständiges Frontend, Backend, Video-Channel und Test-Infrastruktur produktionsbereit. Phase 7 integriert das Logging-System (ADR-017/018) mit strukturiertem slog, SQLite Audit Trail und Loki + Grafana.
 
 **Nicht-Verhandelbar:**
 - Safety First — SAFE MODE ist nicht überbrückbar, Video darf SAFE MODE nie triggern
@@ -321,16 +321,16 @@ BE-11 ─────────────────────┘
 
 ---
 
-### Phase 6 — Testing & Quality Gates
+### Phase 6 — Testing & Quality Gates ✅ *(Sprint 6, abgeschlossen 2026-06-04)*
 
 **Ziel:** Vollständige Test-Infrastruktur, CI läuft durch, Latenz-Ziel verifiziert.
 
 | ID | Task | Typ | Abhängigkeiten |
 |----|------|-----|----------------|
-| TEST-03 | Integration Test Infrastructure — Docker (inkl. STUN/TURN, WebRTC-Flags) | M | DC-03 |
-| TEST-04 | Frontend Test Infrastructure — Jest + RTL + Playwright | M | FE-01 |
-| TEST-05 | Performance / Latency Tests — CI Integration (<100ms Build-Fail) | M | BE-02, TEST-03 |
-| DC-04 | Local Dev Environment Setup (.env.example, Makefile, README) | S | DC-03 |
+| TEST-03 | Integration Test Infrastructure — `tests/docker-compose.test.yml` (control, auth, safety, mosquitto); 9 Go Integration Tests | M | DC-03 |
+| TEST-04 | Frontend Test Infrastructure — **Vitest** + RTL + Playwright; 31/31 Tests grün; `vitest.config.ts` | M | FE-01 |
+| TEST-05 | Performance / Latency Tests — Go Benchmark p99=0ms; k6 p99=244µs; `make test-latency` Build-Fail bei >100ms | M | BE-02, TEST-03 |
+| DC-04 | README Troubleshooting (6 Szenarien) + Contributor Guide (5 Abschnitte); alle Makefile-Targets | S | DC-03 |
 
 ---
 
@@ -364,7 +364,7 @@ Phase 2:           BE-06, BE-09, BE-10, BE-12, TEST-01, TEST-02
 Phase 3:           FE-02, FE-03, FE-04, FE-08, FE-09
 Phase 4:           BE-04, BE-05, BE-07, BE-08
 Phase 5:           FE-05, FE-06, FE-07
-Phase 6:           TEST-03, TEST-04, TEST-05, DC-04
+Phase 6 ✅:        TEST-03, TEST-04, TEST-05, DC-04
 Phase 7:           LOG-01..11
 ```
 
@@ -374,8 +374,8 @@ Phase 7:           LOG-01..11
 
 | Entscheidung | Blockiert | Referenz |
 |---|---|---|
-| Prioritätsmodell technisch (Channels vs. Header-Flag) | TEST-05 / Sprint 6 | ADR-008 Folge |
-| Session Recording Storage (DB/Files/Object Storage) | nach Sprint 6 | ADR-005 Folge — MemoryRecorder als Platzhalter |
+| Prioritätsmodell technisch (Channels vs. Header-Flag) | nach Sprint 7 | ADR-008 Folge — explizite Channel-Trennung noch offen |
+| Session Recording Storage (DB/Files/Object Storage) | nach Sprint 7 | ADR-005 Folge — MemoryRecorder als Platzhalter |
 | DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
 | Backup-Strategie Audit Store (SQLite Volume) | nach LOG-10 | ADR-019 möglich |
 
