@@ -26,6 +26,9 @@ services:
     environment:
       CONTROL_PORT: "8080"
       JWT_SECRET: ${JWT_SECRET}
+      SAFETY_SERVICE_URL: "http://safety-service:8082"
+      SFU_SERVICE_URL: "http://webrtc-sfu:8084"
+      AUTH_SERVICE_URL: "http://auth-service:8081"
     depends_on:
       - auth-service
       - safety-service
@@ -88,7 +91,7 @@ services:
     networks:
       - avoc-net
 
-  # ─── WebRTC SFU (Sprint 4) ─────────────────────────────────────────────────
+  # ─── WebRTC SFU (ADR-014) ──────────────────────────────────────────────────
   webrtc-sfu:
     build:
       context: ../..
@@ -97,12 +100,14 @@ services:
         SERVICE_NAME: webrtc-sfu
     ports:
       - "8084:8084"
+      - "10000-10050:10000-10050/udp"   # RTP media port range (ADR-014)
     environment:
       SFU_PORT: "8084"
+      CONTROL_SERVER_URL: "http://control-server:8080"
     networks:
       - avoc-net
 
-  # ─── STUN/TURN (coturn) ────────────────────────────────────────────────────
+  # ─── STUN/TURN (coturn — ADR-014) ─────────────────────────────────────────
   stun-turn:
     image: coturn/coturn:latest
     ports:
@@ -110,7 +115,8 @@ services:
       - "3479:3478/tcp"
       - "5350:5349/udp"
       - "5350:5349/tcp"
-      # Relay ports activated in Sprint 4 when WebRTC SFU is implemented (ADR-014)
+      # TURN relay UDP range — only needed for Vehicle↔Internet↔OCC (not required for local dev)
+      # Map specific ports in production as needed
     volumes:
       - ../coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
     environment:

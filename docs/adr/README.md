@@ -27,16 +27,19 @@ Vollständige Live-Übersicht: [DECISIONS.MD](../../DECISIONS.MD)
 | [ADR-014](014-video-streaming.md) | Video Streaming | WebRTC SFU (Pion/Go) + coturn; 1 Primary + 1-2 Secondary; Handover; Recording |
 | [ADR-015](015-session-coordinator.md) | Session Coordinator | Control Session als primäre Einheit; GSA; Ephemeral + Checkpoint; SFU Event-Push |
 | [ADR-016](016-session-correlation-id.md) | Correlation ID | ULID; Vehicle-ID → Session-ID → Event-ID; JWT = Identity only |
+| [ADR-017](017-logging-strategy.md) | Logging Strategy | Hybrid: Technical async (slog → Loki); Safety sync (AuditWriter.WriteSync); 3 Log-Klassen; Interface-first |
+| [ADR-018](018-audit-trail-strategy.md) | Audit Trail Strategy | SQLite WAL als AuditWriter; fsync vor SAFE_MODE; garantierte Safety-Event-Persistenz; kein extra Service |
 
 ---
 
 ## Offene Folge-Entscheidungen
 
-| Thema | Referenz |
-|-------|----------|
-| Prioritätsmodell technisch (Channels vs. Header-Flag) | ADR-008 Folge |
-| Session Recording Storage (DB/Files/Object Storage) | ADR-005 Folge |
-| DDS-Produktivimplementierung | ADR-002 Folge |
+| Thema | Blockiert | Referenz |
+|-------|-----------|----------|
+| Prioritätsmodell technisch (Channels vs. Header-Flag) | TEST-05 / Sprint 6 | ADR-008 Folge |
+| Session Recording Storage (DB/Files/Object Storage) | nach Sprint 6 | ADR-005 Folge — MemoryRecorder aktiv seit Sprint 4 |
+| DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
+| Backup-Strategie Audit Store | nach LOG-10 | ADR-019 möglich — SQLite-Volume-Sicherung für Produktivbetrieb |
 
 ---
 

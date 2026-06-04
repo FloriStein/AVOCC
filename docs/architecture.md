@@ -1,6 +1,6 @@
 # Teleoperation System Architecture
 
-Stand: 2026-06-03 (aktualisiert nach ADR-001 bis ADR-016)
+Stand: 2026-06-03 (aktualisiert nach ADR-001 bis ADR-018)
 
 ---
 
@@ -207,11 +207,14 @@ Ein Service, 5 logische Module:
 
 ### UI Module
 
-- **Video Panel:** Primary Stream (always on) + Secondary Streams (on-demand), MEDIA STATE Anzeige
-- **Control Panel:** Joystick, Keyboard, Gamepad, Speed Slider
-- **Safety Panel:** Emergency Stop, Dead-man Switch, SAFE MODE Indikator, Operator Ack Flow
-- **Connection Status Panel:** SYSTEM STATE, Latenzanzeige, Session-ID, Operator-Rolle
-- **Operator Panel:** Handover-Anfrage, Observer-Liste
+| Komponente | Implementierung | Sprint |
+|------------|----------------|--------|
+| **Video Panel** | `VideoPanel.tsx` + `useWebRTC.ts` — RTCPeerConnection, SDP Signaling via `/sfu/subscribe/`, MEDIA STATE Badge, DEGRADED-Overlay | Sprint 5 ✅ |
+| **Control Panel** | `ControlPanel.tsx` + `useControls.ts` — Keyboard WASD/Pfeiltasten, Virtual Joystick SVG, Gamepad API, Speed Slider, 20 Hz Protobuf Command Loop | Sprint 5 ✅ |
+| **Safety Panel** | `SafetyPanel.tsx` + `useDeadmanSwitch.ts` — Emergency Stop, Dead-man Switch (Spacebar/Button), SAFE MODE Indikator | Sprint 3 ✅ |
+| **Connection Status Panel** | `ConnectionPanel.tsx` — SYSTEM STATE, Latenzanzeige, Session-ID (ULID), Operator-Rolle, Speed/Battery (Telemetrie) | Sprint 3/5 ✅ |
+| **SAFE MODE Overlay** | `SafeModeOverlay.tsx` — Fullscreen-Block, Operator-Ack-Button für Recovery | Sprint 3 ✅ |
+| **Operator Panel** | Handover-Anfrage, Observer-Liste | Phase 6 (geplant) |
 
 ---
 
@@ -235,15 +238,25 @@ AutonomousVehicleOperationalControlCenter/
 │   ├── telemetry-service/
 │   └── webrtc-sfu/
 ├── internal/                     # Go Service-interne Pakete
-│   └── controlserver/
-│       ├── transport/            # WebSocket Layer
-│       ├── statemachine/         # 4-Layer State Machine (ADR-011)
-│       ├── safety/               # Safety Decision Module (ADR-009)
-│       └── session/              # Session Manager / GSA (ADR-015/016)
+│   ├── controlserver/
+│   │   ├── command/              # Command Engine — Protobuf Parsing, Rate Limiting (BE-04)
+│   │   ├── transport/            # WebSocket Layer
+│   │   ├── statemachine/         # 4-Layer State Machine (ADR-011)
+│   │   ├── safety/               # Safety Decision Module (ADR-009)
+│   │   └── session/              # Session Manager / GSA (ADR-015/016)
+│   ├── recording/                # Session Recording Interface + MemoryRecorder (BE-07)
+│   ├── telemetryservice/         # MQTT Telemetry Client — Paho (BE-05)
+│   ├── vehicleconnection/        # Vehicle WebSocket Handler (BE-06)
+│   └── webrtcsfu/                # WebRTC SFU Pion/Go — Media Relay (BE-08)
 ├── pkg/                          # Shared Go-Pakete
-│   └── ulid/                     # ULID-Wrapper (ADR-016)
+│   ├── ulid/                     # ULID-Wrapper (ADR-016)
+│   ├── logger/                   # Strukturierter slog-Wrapper — JSON, Event-Type-Katalog (ADR-017)
+│   └── audit/                    # AuditWriter Interface + SQLiteAuditWriter (ADR-018)
 ├── frontend/                     # React App (ADR-013)
 │   └── src/
+│       ├── components/           # VideoPanel, ControlPanel, SafetyPanel, ConnectionPanel, SafeModeOverlay
+│       ├── hooks/                # useControls, useWebRTC, useTelemetry, useSession, useSystemState, useDeadmanSwitch
+│       └── lib/                  # ws-client (Protobuf ACK), api-client
 ├── infrastructure/               # Docker & Compose
 │   ├── docker/                   # Dockerfiles je Service
 │   └── compose/                  # docker-compose.yml
@@ -291,6 +304,8 @@ Alle Komponenten laufen containerisiert. Keine Kubernetes-Abhängigkeit.
 | `mosquitto` | Eclipse Mosquitto | MQTT Broker |
 | `webrtc-sfu` | Go / Pion | WebRTC Media Server, Recording, Multi-Operator |
 | `stun-turn` | coturn | STUN/TURN für NAT Traversal (Vehicle ↔ Internet ↔ OCC) |
+| `loki` | Grafana Loki | Log-Aggregation (Phase 7) |
+| `grafana` | Grafana | Log-Visualisierung, Session-Dashboards (Phase 7) |
 
 ### Design Principles
 
@@ -299,3 +314,62 @@ Alle Komponenten laufen containerisiert. Keine Kubernetes-Abhängigkeit.
 - Kommunikation nur via definierte Protokolle
 - Volle lokale Reproduzierbarkeit via `docker-compose up`
 - CI benötigt Docker + STUN/TURN (WebRTC E2E Tests non-blocking — ADR-006)
+
+---
+
+## Logging Architecture (ADR-017/018)
+
+### Drei Log-Klassen
+
+| Klasse | Verlust | Pfad |
+|--------|---------|------|
+| Technical Log | Erlaubt | async → slog → stdout → Docker → Loki |
+| Audit Log | Nicht erlaubt | async → slog → stdout → Docker → Loki |
+| **Safety Event** | **Niemals** | sync → `AuditWriter.WriteSync()` → SQLite (WAL) + async → Loki |
+
+### Hybrid Sync/Async-Pipeline
+
+```
+                    ┌───────────────────┐
+                    │  Control Server   │
+                    └─────────┬─────────┘
+                              │
+              ┌───────────────┴───────────────┐
+              │                               │
+              ▼                               ▼
+
+      Technical Logger                 Safety Logger
+    (async — slog → stdout)        (sync — AuditWriter.WriteSync)
+
+              │                               │
+              ▼                               ▼
+
+      Docker → Promtail          SQLite WAL (pkg/audit)
+              │                               │
+              ▼                               ▼
+           Loki                         Audit Store
+              │                   (garantierte Persistenz)
+              ▼
+           Grafana
+```
+
+**Invariante:** SAFE_MODE-Transition erst nach erfolgreichem `AuditWriter.WriteSync()` + fsync.
+
+### Frontend Log-Ingestion
+
+```
+Browser → POST /api/log → Control Server → slog (service="frontend") → Loki
+```
+
+Keine direkte Loki-Verbindung aus dem Browser — Authentifizierung und Session-Kontext bleiben zentral.
+
+### Pflichtfelder (alle Log-Einträge)
+
+```json
+{
+  "time": "2026-06-03T19:00:00Z", "level": "INFO", "service": "control-server",
+  "session_id": "01JTXY...", "event_id": "01JTXY...",
+  "vehicle_id": "vehicle-1", "operator_id": "operator-1",
+  "event_type": "SAFE_MODE_ENTERED", "msg": "Dead-man timeout"
+}
+```

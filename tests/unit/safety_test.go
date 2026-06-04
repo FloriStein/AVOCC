@@ -77,8 +77,9 @@ func TestSafety_DeadmanTimeout_TriggersSafeMode(t *testing.T) {
 
 	watchdog := csafety.NewDeadmanWatchdog(50*time.Millisecond, sm, pub)
 	watchdog.Start(sess.ID, sess.VehicleID)
+	watchdog.Reset() // arm the watchdog (simulates first DEADMAN_HOLD received)
 
-	// Do NOT call Reset() — let the timer fire
+	// Do NOT call Reset() again — let the armed timer fire
 	time.Sleep(150 * time.Millisecond)
 
 	sys, ctrl, _, _ := sm.Get()

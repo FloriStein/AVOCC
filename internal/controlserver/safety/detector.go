@@ -10,13 +10,18 @@ import (
 )
 
 const (
-	DefaultDeadmanTimeout = 2 * time.Second
+	DefaultDeadmanTimeout = 10 * time.Second
 	DefaultACKTimeout     = 100 * time.Millisecond
 )
 
 // DeadmanWatchdog fires SAFE_MODE if Reset() is not called within Timeout.
 // Reset() must be called on every DEADMAN_HOLD command from the operator (ADR-009).
 // Loslassen = timeout = CRITICAL.
+//
+// Armed pattern: the countdown only begins after the first Reset() call.
+// Start() registers the session but does not start the timer — the operator
+// must send at least one DEADMAN_HOLD to arm the watchdog. This prevents
+// Safe Mode from firing before the operator has had a chance to interact.
 type DeadmanWatchdog struct {
 	mu        sync.Mutex
 	timer     *time.Timer
@@ -26,6 +31,7 @@ type DeadmanWatchdog struct {
 	sessionID string
 	vehicleID string
 	stopped   bool
+	armed     bool // true after the first Reset() — only then does the countdown run
 }
 
 func NewDeadmanWatchdog(timeout time.Duration, sm *statemachine.Machine, publisher Publisher) *DeadmanWatchdog {
@@ -36,25 +42,39 @@ func NewDeadmanWatchdog(timeout time.Duration, sm *statemachine.Machine, publish
 	}
 }
 
-// Start activates the watchdog for the given session. Call when entering CONTROL_ACTIVE.
+// Start registers the session and prepares the watchdog, but does NOT start the timer.
+// The countdown begins only when the operator sends the first DEADMAN_HOLD (see Reset()).
 func (w *DeadmanWatchdog) Start(sessionID, vehicleID string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.timer != nil {
+		w.timer.Stop()
+	}
 	w.sessionID = sessionID
 	w.vehicleID = vehicleID
 	w.stopped = false
-	w.timer = time.AfterFunc(w.timeout, w.fire)
-	log.Printf("[DEADMAN] watchdog started (timeout=%s, session=%s)", w.timeout, sessionID)
+	w.armed = false
+	w.timer = nil
+	log.Printf("[DEADMAN] watchdog ready (timeout=%s, session=%s) — waiting for first HOLD", w.timeout, sessionID)
 }
 
-// Reset restarts the timer. Call on every incoming DEADMAN_HOLD command.
+// Reset arms the watchdog on the first call and resets the timer on all subsequent calls.
+// First call = operator confirmed they are holding the dead-man switch.
 func (w *DeadmanWatchdog) Reset() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.stopped || w.timer == nil {
+	if w.stopped {
 		return
 	}
-	w.timer.Reset(w.timeout)
+	if !w.armed {
+		w.armed = true
+		w.timer = time.AfterFunc(w.timeout, w.fire)
+		log.Printf("[DEADMAN] watchdog armed (session=%s)", w.sessionID)
+		return
+	}
+	if w.timer != nil {
+		w.timer.Reset(w.timeout)
+	}
 }
 
 // Stop disables the watchdog — call on clean disconnect or SAFE_MODE entry.

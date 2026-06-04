@@ -5,12 +5,16 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
+	"avoc/internal/controlserver/command"
 	csafety "avoc/internal/controlserver/safety"
 	"avoc/internal/controlserver/session"
 	"avoc/internal/controlserver/statemachine"
 	"avoc/internal/controlserver/transport"
+	"avoc/internal/recording"
 	"avoc/internal/vehicleconnection"
+	"avoc/pkg/ulid"
 )
 
 func main() {
@@ -35,9 +39,11 @@ func main() {
 	deadman := csafety.NewDeadmanWatchdog(csafety.DefaultDeadmanTimeout, sm, safetyPub)
 	ackWatcher := csafety.NewACKTimeoutWatcher(csafety.DefaultACKTimeout, sm, safetyPub)
 	handoverMgr := session.NewHandoverManager(sm, sessionMgr, authURL)
+	recorder := recording.NewMemoryRecorder()
+	cmdEngine := command.NewEngine(sm, safetyPub, sessionMgr, deadman)
 
 	// --- Handlers ---
-	wsHandler := transport.NewWSHandler(secret, sm, sessionMgr, deadman, ackWatcher)
+	wsHandler := transport.NewWSHandler(secret, sm, sessionMgr, deadman, ackWatcher, cmdEngine)
 	vehicleHandler := vehicleconnection.NewHandler(secret, sm, safetyPub)
 
 	// --- Routes ---
@@ -68,12 +74,18 @@ func main() {
 		sm.TransitionOperator(statemachine.OpActive)
 		deadman.Start(sess.ID, sess.VehicleID)
 		sessionMgr.PushSFUEvent("SESSION_CREATED")
+		recorder.StartSession(sess.ID, sess.VehicleID, sess.OperatorID)
+		sys, ctrl, _, _ := sm.Get()
+		recorder.RecordStateSnapshot(sess.ID, ulid.Generate(), sess.VehicleID, sess.OperatorID, string(sys), string(ctrl))
 		log.Printf("[SESSION] started: id=%s vehicle=%s operator=%s", sess.ID, sess.VehicleID, sess.OperatorID)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"session_id": sess.ID})
 	})
 
 	mux.HandleFunc("POST /session/end", func(w http.ResponseWriter, _ *http.Request) {
+		if sess, ok := sessionMgr.GetCurrentSession(); ok {
+			recorder.EndSession(sess.ID)
+		}
 		sessionMgr.PushSFUEvent("SESSION_ENDED")
 		sessionMgr.EndSession()
 		sm.TransitionOperator(statemachine.OpNoOperator)
@@ -117,6 +129,34 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
+	// MEDIA STATE update — frontend reports WebRTC state changes (ADR-009/011 Invariant 1)
+	// MEDIA_FAILED → DEGRADED (never SAFE_MODE)
+	mux.HandleFunc("POST /media/event", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			State string `json:"state"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		switch req.State {
+		case "MEDIA_NEGOTIATING":
+			sm.TransitionMedia(statemachine.MediaNegotiating)
+		case "MEDIA_CONNECTED":
+			sm.TransitionMedia(statemachine.MediaConnected)
+		case "MEDIA_DEGRADED":
+			sm.TransitionMedia(statemachine.MediaDegraded)
+		case "MEDIA_FAILED":
+			sm.TransitionMedia(statemachine.MediaFailed) // → DEGRADED, never SAFE_MODE
+		case "MEDIA_INIT":
+			sm.TransitionMedia(statemachine.MediaInit)
+		default:
+			http.Error(w, "unknown media state", http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	})
+
 	// Emergency Stop proxy — frontend calls this to avoid cross-origin issues (ADR-009)
 	mux.HandleFunc("POST /emergency-stop", func(w http.ResponseWriter, r *http.Request) {
 		sess, _ := sessionMgr.GetCurrentSession()
@@ -125,8 +165,25 @@ func main() {
 		if sess.ID != "" {
 			sessionMgr.SaveCheckpoint("SAFE_MODE", "CONTROL_BLOCKED", "EMERGENCY_STOP")
 			sessionMgr.PushSFUEvent("SESSION_SAFE_MODE")
+			recorder.RecordSafetyEvent(sess.ID, ulid.Generate(), sess.VehicleID, sess.OperatorID, "EMERGENCY_STOP", "operator emergency stop")
 		}
 		w.WriteHeader(http.StatusAccepted)
+	})
+
+	// Recording inspection (ADR-005)
+	mux.HandleFunc("GET /recording/", func(w http.ResponseWriter, r *http.Request) {
+		sessionID := strings.TrimPrefix(r.URL.Path, "/recording/")
+		if sessionID == "" {
+			http.Error(w, "session_id required", http.StatusBadRequest)
+			return
+		}
+		entries := recorder.GetEntries(sessionID)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"session_id": sessionID,
+			"count":      len(entries),
+			"entries":    entries,
+		})
 	})
 
 	// State + Health

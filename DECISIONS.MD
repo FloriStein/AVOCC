@@ -21,11 +21,14 @@
 | [ADR-014](docs/adr/014-video-streaming.md) | Video Streaming Technologie | Accepted | WebRTC SFU (Pion/Go) + coturn; 1 Primary + 1-2 Secondary; server-seitiges Recording; Handover |
 | [ADR-015](docs/adr/015-session-coordinator.md) | Session Coordinator | Accepted | Control Session als primäre Einheit; GSA = Control Server; Ephemeral + Checkpoint; SFU Event-Push |
 | [ADR-016](docs/adr/016-session-correlation-id.md) | Session Correlation ID | Accepted | ULID; Control Server generiert bei CONNECTING→CONNECTED; Vehicle-ID→Session-ID→Event-ID; JWT = Identity only |
+| [ADR-017](docs/adr/017-logging-strategy.md) | Logging Strategy | Accepted | Hybrid: Technical Logs async (slog → Loki); Safety Events sync (AuditWriter.WriteSync); 3 Log-Klassen; Frontend via POST /log; Interface-first (ADR-018) |
+| [ADR-018](docs/adr/018-audit-trail-strategy.md) | Audit Trail Strategy | Accepted | SQLite WAL (embedded, kein extra Service) als AuditWriter-Implementierung; garantierte Persistenz Safety Events; fsync vor SAFE_MODE |
 
 ## Offene Folge-Entscheidungen
 
 | Thema | Blockiert | Referenz |
 |-------|-----------|----------|
-| Prioritätsmodell technisch (getrennte Channels vs. Header-Flag) | Phase 4 | ADR-008 Folge |
-| Session Recording Storage (DB/Files/Object Storage) | BE-07, vor Phase 4 | ADR-005 Folge |
-| DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
+| Prioritätsmodell technisch (getrennte Channels vs. Header-Flag) | TEST-05 / Sprint 6 | ADR-008 Folge — BE-04 nutzt Publisher-Pattern; explizite Channel-Trennung noch offen |
+| Session Recording Storage (DB/Files/Object Storage) | nach Sprint 6 | ADR-005 Folge — MemoryRecorder seit Sprint 4 als Platzhalter aktiv; Storage-ADR noch ausstehend |
+| DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge — Safety Event Bus als DDS-Drop-in implementiert |
+| Backup-Strategie Audit Store (SQLite Volume) | nach LOG-10 | ADR-019 möglich — SQLite-Volume-Sicherung, Replikation für Produktivbetrieb |

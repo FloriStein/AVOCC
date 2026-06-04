@@ -1,9 +1,14 @@
 import { useEffect } from 'react'
 import { useSystemState } from '@/hooks/useSystemState'
 import { useSession } from '@/hooks/useSession'
+import { useTelemetry } from '@/hooks/useTelemetry'
 import { SafeModeOverlay } from '@/components/SafeModeOverlay'
 import { SafetyPanel } from '@/components/SafetyPanel'
 import { ConnectionPanel } from '@/components/ConnectionPanel'
+import { VideoPanel } from '@/components/VideoPanel'
+import { ControlPanel } from '@/components/ControlPanel'
+
+const VEHICLE_ID = 'vehicle-1'
 
 const STATE_COLORS: Record<string, string> = {
   IDLE:          'bg-gray-500',
@@ -24,9 +29,18 @@ function SystemStateBadge({ state }: { state: string }) {
   )
 }
 
+const OPERATOR_ROLE_LABEL: Record<string, string> = {
+  NO_OPERATOR:       '',
+  OPERATOR_ASSIGNED: 'Assigned',
+  ACTIVE_OPERATOR:   'Active Operator',
+  HANDOVER_PENDING:  'Handover…',
+  RECOVERING_OPERATOR: 'Recovering',
+}
+
 export default function App() {
   const state = useSystemState()
   const session = useSession()
+  const telemetry = useTelemetry(session.sessionId ? VEHICLE_ID : null)
 
   const isConnected = state.system === 'CONNECTED' || state.system === 'DEGRADED'
   const isSafeMode = state.system === 'SAFE_MODE'
@@ -53,6 +67,12 @@ export default function App() {
       <header className="bg-gray-800 border-b border-gray-700 px-6 py-3 flex items-center justify-between">
         <h1 className="text-lg font-bold tracking-wide">AVOC — Teleoperation Control Center</h1>
         <div className="flex items-center gap-3">
+          {/* Operator role badge */}
+          {state.operator !== 'NO_OPERATOR' && (
+            <span className="text-xs font-mono text-gray-400 bg-gray-700 px-2 py-1 rounded">
+              {OPERATOR_ROLE_LABEL[state.operator] ?? state.operator}
+            </span>
+          )}
           {state.system === 'IDLE' && (
             <button
               onClick={session.connect}
@@ -73,14 +93,9 @@ export default function App() {
       )}
 
       {/* Main Grid */}
-      <main className="flex-1 grid grid-cols-3 grid-rows-2 gap-4 p-4">
+      <main className="flex-1 grid grid-cols-3 grid-rows-2 gap-4 p-4 min-h-0">
         {/* Video Panel — 2 columns, 2 rows */}
-        <section className="col-span-2 row-span-2 bg-black rounded-lg border border-gray-700 flex flex-col items-center justify-center gap-2">
-          <p className="text-gray-500 text-sm">Video Stream (WebRTC — Sprint 4)</p>
-          {state.media !== 'MEDIA_INIT' && (
-            <span className="text-xs font-mono text-gray-600">{state.media}</span>
-          )}
-        </section>
+        <VideoPanel sessionId={session.sessionId} enabled={isConnected} />
 
         {/* Safety Panel */}
         <SafetyPanel
@@ -89,31 +104,23 @@ export default function App() {
           wsClient={session.wsClient}
         />
 
-        {/* Connection Status Panel */}
+        {/* Connection + Telemetry Panel */}
         <ConnectionPanel
           systemState={state.system}
           operatorState={state.operator}
           sessionId={session.sessionId}
           latency={session.latency}
+          telemetry={telemetry}
         />
       </main>
 
-      {/* Control Bar */}
-      <footer className="bg-gray-800 border-t border-gray-700 px-6 py-3 flex items-center gap-4">
-        <span className="text-gray-400 text-sm">Control Panel</span>
-        <div className="flex gap-2 ml-auto">
-          {['Joystick', 'Keyboard', 'Gamepad'].map((ctrl) => (
-            <button
-              key={ctrl}
-              disabled={!isConnected}
-              className="px-3 py-1 bg-gray-700 rounded text-sm
-                         disabled:opacity-40 disabled:cursor-not-allowed
-                         enabled:hover:bg-gray-600 transition-colors"
-            >
-              {ctrl}
-            </button>
-          ))}
-        </div>
+      {/* Control Panel Footer */}
+      <footer className="bg-gray-800 border-t border-gray-700">
+        <ControlPanel
+          wsClient={session.wsClient}
+          sessionId={session.sessionId}
+          enabled={isConnected}
+        />
       </footer>
     </div>
   )

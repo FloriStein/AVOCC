@@ -104,8 +104,29 @@ cd frontend && npm install && npm run dev
 │   ├── docker/             # Dockerfiles, nginx.conf
 │   ├── coturn/             # STUN/TURN Konfiguration
 │   └── mosquitto/          # MQTT Broker Konfiguration
-└── tests/unit/             # Safety Test Suite (19 Szenarien)
+└── tests/unit/             # Safety Test Suite (19 Szenarien, Sprint 2)
 ```
+
+---
+
+## Implementierungsstand
+
+**Phasen 1–5 abgeschlossen — 27/31 Tasks ✅**
+
+| Feature | Implementiert |
+|---------|--------------|
+| Keyboard WASD/Pfeiltasten → Protobuf STEER/THROTTLE | Sprint 5 |
+| Virtual Joystick SVG (Drag, 20 Hz Command Loop) | Sprint 5 |
+| Gamepad API → STEER/THROTTLE/BRAKE | Sprint 5 |
+| Speed Slider (skaliert alle Commands) | Sprint 5 |
+| WebRTC RTCPeerConnection + SDP Signaling via SFU | Sprint 5 |
+| MEDIA STATE Badge + DEGRADED-Overlay im Browser | Sprint 5 |
+| Telemetrie-Anzeige Speed/Battery via MQTT | Sprint 5 |
+| Operator-Rolle im Dashboard-Header | Sprint 5 |
+| Protobuf ControlAck parsen (Latenz + error_msg) | Sprint 5 |
+| nginx Docker DNS Resolver (kein 502 nach Rebuild) | Sprint 5 |
+
+**Offen (Sprint 6):** Vitest+RTL Tests, Playwright E2E, k6 Latenz-CI (<100ms Build-Fail), README Troubleshooting
 
 ---
 
@@ -116,16 +137,18 @@ cd frontend && npm install && npm run dev
 | Sprint 1 | Foundation Layer — Proto, Auth, WebSocket, Docker Compose | ✅ |
 | Sprint 2 | Safety & Failure Model — State Machine, Watchdogs, Handover, Tests | ✅ |
 | Sprint 3 | Frontend Core — WebSocket Client, State-Polling, SAFE MODE, E-Stop | ✅ |
-| Sprint 4 | Core Backend Services — BE-04, BE-05, BE-07, BE-08 | 🔲 |
-| Sprint 5 | Feature Completion Frontend — FE-05, FE-06, FE-07 | 🔲 |
-| Sprint 6 | Testing & Quality Gates — TEST-03, TEST-04, TEST-05 | 🔲 |
+| Sprint 4 | Core Backend Services — Command Engine, MQTT, Recording, WebRTC SFU | ✅ |
+| Sprint 5 | Feature Completion Frontend — Control Panel, Video Panel, Dashboard, Telemetrie | ✅ |
+| Sprint 6 | Testing & Quality Gates — TEST-03, TEST-04, TEST-05, DC-04 | 🔲 |
 
 → Aktueller Sprint: [tasks/current-sprint.md](tasks/current-sprint.md) | Backlog: [tasks/backlog.md](tasks/backlog.md)
 
 ---
 
-## ADR-Übersicht (16 Entscheidungen)
+## ADR-Übersicht (18 Entscheidungen)
 
 Alle Architekturentscheidungen sind dokumentiert und unveränderlich. Neue Erkenntnisse führen zu einem neuen ADR.
+
+Zuletzt hinzugefügt: [ADR-017](docs/adr/017-logging-strategy.md) (Hybrid Logging) · [ADR-018](docs/adr/018-audit-trail-strategy.md) (SQLite Audit Trail)
 
 → [docs/adr/README.md](docs/adr/README.md) | Live-Übersicht: [DECISIONS.MD](DECISIONS.MD)

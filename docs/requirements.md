@@ -1,6 +1,6 @@
 # Requirements — Teleoperation Control System
 
-Stand: 2026-06-03 (aktualisiert nach ADR-001 bis ADR-016)
+Stand: 2026-06-03 (aktualisiert nach ADR-001 bis ADR-018)
 
 ---
 
@@ -179,6 +179,47 @@ Regel: NO_OPERATOR → SYSTEM SAFE_MODE. Max. 1 ACTIVE_OPERATOR pro Session.
   - `webrtc-sfu` — Go/Pion (Media Server, Recording, Multi-Operator)
   - `stun-turn` — coturn (NAT Traversal für Vehicle ↔ Internet ↔ OCC)
   - `mosquitto` — Eclipse Mosquitto (MQTT Broker)
+  - `loki` — Grafana Loki (Log-Aggregation — Phase 7)
+  - `grafana` — Grafana (Log-Visualisierung, Session-Dashboards — Phase 7)
 - Kein Kubernetes in dieser Phase
 - Full local reproducibility via `docker-compose up`
 - CI benötigt Docker-Environment (Integration Tests, WebRTC Browser-Flags)
+
+---
+
+## Logging Requirements (ADR-017/018)
+
+### Strukturiertes Logging
+
+- Alle Services (Backend + Frontend) loggen strukturiert als JSON
+- Jeder Log-Eintrag enthält: `time`, `level`, `service`, `session_id`, `event_id`, `vehicle_id`, `operator_id`, `event_type`, `msg`
+- Kein Freitext-Logging — typisierter `event_type` aus definiertem Katalog
+- Frontend sendet Logs via `POST /api/log` an Control Server (niemals direkt an Loki)
+
+### Log-Klassen
+
+| Klasse | Verlust erlaubt | Anforderung |
+|--------|-----------------|-------------|
+| Technical Log | Ja | async slog → stdout → Loki |
+| Audit Log | Nein | async slog → stdout → Loki |
+| Safety Event | Niemals | **synchron** via `AuditWriter.WriteSync()` → SQLite + Loki |
+
+### Safety-Log-Garantie
+
+- Safety Events (`EMERGENCY_STOP`, `DEADMAN_TIMEOUT`, `SAFE_MODE_ENTERED`, `SAFE_MODE_EXITED`, `COMMAND_ACK_TIMEOUT`, `SAFETY_BUS_FAILURE`, `OPERATOR_HANDOVER_COMPLETED`, `SESSION_STARTED`, `SESSION_ENDED`) müssen garantiert persistiert werden
+- Persistenz erfolgt **vor** dem Abschluss der SAFE_MODE-Transition (fsync)
+- Loki-Ausfall darf Safety-Event-Persistenz nicht beeinflussen
+- Audit Store: SQLite WAL-Modus (embedded, kein extra Service — ADR-018)
+
+### Session-Rekonstruktion
+
+- Eine vollständige Teleoperation-Session muss über Frontend-, Backend-, Safety-, Telemetry- und Video-Ereignisse hinweg rekonstruierbar sein
+- Korrelation über `session_id` (ULID, ADR-016) als primären Anker
+- Grafana-Dashboard: LogQL-Abfragen wie `{session_id="01J..."}` über alle Services
+- SQLite-Query: `SELECT * FROM audit_events WHERE session_id=? ORDER BY timestamp`
+
+### Latenz-Anforderung
+
+- Technical-Log-Overhead: `<1ms` (async slog, stdout-Puffer)
+- Safety-Event-Overhead: `~1–5ms` (fsync) — akzeptabel, da Safety Events selten
+- Control-Loop-Budget `<100ms` (ADR-010) darf durch Logging nicht verletzt werden

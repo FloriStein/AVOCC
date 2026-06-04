@@ -9,11 +9,15 @@ import (
 	"strings"
 	"time"
 
+	commonv1 "avoc/gen/go/common/v1"
+	controlv1 "avoc/gen/go/control/v1"
+	"avoc/internal/controlserver/command"
 	csafety "avoc/internal/controlserver/safety"
 	"avoc/internal/controlserver/session"
 	"avoc/internal/controlserver/statemachine"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
+	"google.golang.org/protobuf/proto"
 )
 
 const heartbeatInterval = 30 * time.Second
@@ -33,6 +37,7 @@ type WSHandler struct {
 	sessionMgr *session.Manager
 	deadman    *csafety.DeadmanWatchdog
 	ackWatcher *csafety.ACKTimeoutWatcher
+	engine     *command.Engine
 }
 
 func NewWSHandler(
@@ -41,6 +46,7 @@ func NewWSHandler(
 	sessionMgr *session.Manager,
 	deadman *csafety.DeadmanWatchdog,
 	ackWatcher *csafety.ACKTimeoutWatcher,
+	engine *command.Engine,
 ) *WSHandler {
 	return &WSHandler{
 		jwtSecret:  []byte(jwtSecret),
@@ -48,6 +54,7 @@ func NewWSHandler(
 		sessionMgr: sessionMgr,
 		deadman:    deadman,
 		ackWatcher: ackWatcher,
+		engine:     engine,
 	}
 }
 
@@ -135,21 +142,32 @@ func (h *WSHandler) readLoop(conn *websocket.Conn, claims *Claims) {
 
 		sess, hasSession := h.sessionMgr.GetCurrentSession()
 
-		// Reset dead-man watchdog on every command (BE-10).
-		// TODO BE-04: only reset on COMMAND_TYPE_DEADMAN_HOLD after protobuf parsing.
-		h.deadman.Reset()
-
 		if hasSession {
-			// Start ACK timeout window (ADR-010).
 			h.ackWatcher.CommandReceived(sess.ID, sess.VehicleID)
 		}
 
-		log.Printf("Control command received (%d bytes)", len(msg))
-		// TODO BE-04: route to Command Engine (parse protobuf ControlCommand)
+		// Route command through the Command Engine — parses Protobuf ControlCommand,
+		// handles DEADMAN_HOLD/RELEASE, EMERGENCY_STOP, and control inputs (BE-04).
+		var ackBytes []byte
+		if hasSession {
+			var err error
+			ackBytes, err = h.engine.Handle(msg, sess)
+			if err != nil {
+				ackBytes, _ = proto.Marshal(&controlv1.ControlAck{
+					Header:   &commonv1.CorrelationHeader{Timestamp: time.Now().UnixMilli()},
+					Success:  false,
+					ErrorMsg: "command engine error",
+				})
+			}
+		} else {
+			ackBytes, _ = proto.Marshal(&controlv1.ControlAck{
+				Header:   &commonv1.CorrelationHeader{Timestamp: time.Now().UnixMilli()},
+				Success:  false,
+				ErrorMsg: "no active session",
+			})
+		}
 
-		// Send immediate ACK — cancels the ACK timeout window.
-		// TODO BE-04: send proper ControlAck protobuf response.
-		if err := conn.WriteMessage(websocket.TextMessage, []byte(`{"ack":true}`)); err != nil {
+		if err := conn.WriteMessage(websocket.BinaryMessage, ackBytes); err != nil {
 			h.ackWatcher.CommandACKed()
 			return
 		}

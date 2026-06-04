@@ -1,10 +1,17 @@
-// Connection Status Panel — live SYSTEM STATE, latency, session-ID, operator role (ADR-016).
+// Connection Status Panel — live SYSTEM STATE, latency, session-ID, operator role, telemetry (ADR-016).
+
+interface TelemetryData {
+  speedKmh: number
+  batteryPct: number
+  status: string
+}
 
 interface Props {
   systemState: string
   operatorState: string
   sessionId: string | null
   latency: number
+  telemetry?: TelemetryData | null
 }
 
 const STATE_COLORS: Record<string, string> = {
@@ -33,7 +40,7 @@ function LatencyColor(ms: number): string {
   return 'text-red-400'
 }
 
-export function ConnectionPanel({ systemState, operatorState, sessionId, latency }: Props) {
+export function ConnectionPanel({ systemState, operatorState, sessionId, latency, telemetry }: Props) {
   const shortId = sessionId ? sessionId.slice(0, 8) + '…' : '—'
 
   return (
@@ -63,6 +70,29 @@ export function ConnectionPanel({ systemState, operatorState, sessionId, latency
           {shortId}
         </span>
       </div>
+
+      {/* Telemetry — shown when MQTT data is available */}
+      {telemetry && (
+        <>
+          <hr className="border-gray-700" />
+          <div className="flex justify-between text-sm items-center">
+            <span className="text-gray-400">Speed</span>
+            <span className="font-mono text-blue-300 text-sm">{telemetry.speedKmh.toFixed(1)} km/h</span>
+          </div>
+          <div className="flex justify-between text-sm items-center">
+            <span className="text-gray-400">Battery</span>
+            <span className={`font-mono text-sm ${telemetry.batteryPct < 20 ? 'text-red-400' : 'text-green-400'}`}>
+              {telemetry.batteryPct.toFixed(0)} %
+            </span>
+          </div>
+          {telemetry.status && (
+            <div className="flex justify-between text-sm items-center">
+              <span className="text-gray-400">Status</span>
+              <span className="text-gray-300 text-xs font-mono">{telemetry.status}</span>
+            </div>
+          )}
+        </>
+      )}
     </section>
   )
 }

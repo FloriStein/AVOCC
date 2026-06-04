@@ -28,7 +28,7 @@ loadSchemas()
 
 const generateULID = monotonicFactory()
 
-const DEADMAN_INTERVAL_MS = 400
+const DEADMAN_INTERVAL_MS = 1500
 
 // Dead-man Switch — operator must actively hold (spacebar or button).
 // Releasing causes the server-side watchdog to fire SAFE_MODE after 2s (ADR-009).
@@ -54,7 +54,7 @@ export function useDeadmanSwitch(
       })
       const cmd = create(ControlCommandSchema, {
         header,
-        type: CommandType.COMMAND_TYPE_DEADMAN_HOLD,
+        type: CommandType.DEADMAN_HOLD,  // protoc-gen-es v2: short names (DEADMAN_HOLD not COMMAND_TYPE_DEADMAN_HOLD)
         value: 1.0,
       })
       wsClient.send(toBinary(ControlCommandSchema, cmd))

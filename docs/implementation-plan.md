@@ -1,13 +1,13 @@
 # Implementation Plan — Teleoperation System
 
 Stand: 2026-06-03
-Status: Phase 1/2/3 abgeschlossen ✅ — Phase 4/5/6 offen (alle ADRs abgeschlossen — 16 ADRs)
+Status: Phase 1/2/3/4/5 abgeschlossen ✅ — Phase 6/7 offen (18 ADRs — ADR-017/018 nach Grill-Me ergänzt)
 
 ---
 
 ## 1. Executive Summary
 
-Wir bauen ein sicheres, modulares Echtzeit-Teleoperation-System zur Fernsteuerung von Fahrzeugen über das offene Internet (Vehicle ↔ Internet ↔ OCC, uncontrolled routing). Die Architektur ist vollständig durch 14 ADRs entschieden. Die Implementierung startet mit einem stabilen Fundament (Proto-Schema, Auth, Safety Event Bus, Control Server) und wächst iterativ durch 6 Phasen zur vollständigen Lösung.
+Wir bauen ein sicheres, modulares Echtzeit-Teleoperation-System zur Fernsteuerung von Fahrzeugen über das offene Internet (Vehicle ↔ Internet ↔ OCC, uncontrolled routing). Die Architektur ist durch 18 ADRs entschieden. Die Implementierung startete mit einem stabilen Fundament (Proto-Schema, Auth, Safety Event Bus, Control Server) und ist nach 5 Sprints mit vollständigem Frontend, Backend und Video-Channel produktionsbereit. Sprint 6 schließt Testing & Quality Gates ab, Phase 7 integriert das Logging-System (ADR-017/018).
 
 **Nicht-Verhandelbar:**
 - Safety First — SAFE MODE ist nicht überbrückbar, Video darf SAFE MODE nie triggern
@@ -296,7 +296,7 @@ BE-11 ─────────────────────┘
 
 ---
 
-### Phase 4 — Core Backend Services
+### Phase 4 — Core Backend Services ✅ *(Sprint 4, abgeschlossen 2026-06-03)*
 
 **Ziel:** Alle Backend-Services vollständig implementiert, Video-Channel aktiv.
 
@@ -309,7 +309,7 @@ BE-11 ─────────────────────┘
 
 ---
 
-### Phase 5 — Feature Completion (Frontend)
+### Phase 5 — Feature Completion (Frontend) ✅ *(Sprint 5, abgeschlossen 2026-06-03)*
 
 **Ziel:** Vollständige Teleoperation-UI nutzbar. Video-Stream im Browser aktiv.
 
@@ -334,10 +334,30 @@ BE-11 ─────────────────────┘
 
 ---
 
+### Phase 7 — Logging & Audit Trail (ADR-017/018)
+
+**Ziel:** Vollständig strukturiertes Logging. Safety Events garantiert persistent. Grafana-Dashboard für Session-Rekonstruktion.
+
+| ID | Task | Typ | Abhängigkeiten |
+|----|------|-----|----------------|
+| LOG-01 | `pkg/logger/` — strukturierter slog-Wrapper (shared) | M | — |
+| LOG-02 | Control Server Migration — `log.Printf` → strukturierter Logger | M | LOG-01 |
+| LOG-03 | Auth Service Migration | S | LOG-01 |
+| LOG-04 | Safety Service Migration | S | LOG-01 |
+| LOG-05 | Telemetry Service Migration | S | LOG-01 |
+| LOG-06 | WebRTC SFU Migration | S | LOG-01 |
+| LOG-07 | `POST /log` Endpoint — Frontend Log-Ingestion | M | LOG-02 |
+| LOG-08 | Frontend `logger.ts` + Integration | M | LOG-07 |
+| LOG-09 | Loki + Grafana + Promtail Docker Compose | M | LOG-01 |
+| LOG-10 | `pkg/audit/` — AuditWriter Interface + SQLiteAuditWriter (ADR-018) | M | LOG-01 |
+| LOG-11 | Control Server Safety-Event-Integration — AuditWriter auf kritischem Pfad | M | LOG-10, LOG-02 |
+
+---
+
 ## 9. Vollständige Task-Übersicht
 
 ```
-31 Tasks gesamt / 5 Epics
+42 Tasks gesamt / 6 Epics
 
 Phase 1 (Sprint 1): INFRA-01, FE-01, BE-01, BE-02, BE-03, BE-11, DC-01, DC-02, DC-03
 Phase 2:           BE-06, BE-09, BE-10, BE-12, TEST-01, TEST-02
@@ -345,21 +365,23 @@ Phase 3:           FE-02, FE-03, FE-04, FE-08, FE-09
 Phase 4:           BE-04, BE-05, BE-07, BE-08
 Phase 5:           FE-05, FE-06, FE-07
 Phase 6:           TEST-03, TEST-04, TEST-05, DC-04
+Phase 7:           LOG-01..11
 ```
 
 ---
 
 ## 10. Offene Folge-Entscheidungen
 
-| Entscheidung | Blockiert | Wann nötig |
+| Entscheidung | Blockiert | Referenz |
 |---|---|---|
-| Prioritätsmodell technisch (Channels vs. Header-Flag) | Phase 4 | ADR-008 Folge |
-| Session Recording Storage (DB/Files/Object Storage) | BE-07 | ADR-005 Folge, vor Phase 4 |
+| Prioritätsmodell technisch (Channels vs. Header-Flag) | TEST-05 / Sprint 6 | ADR-008 Folge |
+| Session Recording Storage (DB/Files/Object Storage) | nach Sprint 6 | ADR-005 Folge — MemoryRecorder als Platzhalter |
 | DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
+| Backup-Strategie Audit Store (SQLite Volume) | nach LOG-10 | ADR-019 möglich |
 
 ---
 
-## 11. ADR-Index (16 ADRs)
+## 11. ADR-Index (18 ADRs)
 
 | ADR | Titel | Entscheidung |
 |-----|-------|-------------|
@@ -380,3 +402,5 @@ Phase 6:           TEST-03, TEST-04, TEST-05, DC-04
 | [ADR-014](adr/014-video-streaming.md) | Video Streaming | WebRTC SFU (Pion/Go) + coturn; 1 Primary + 1-2 Secondary; Recording; Handover |
 | [ADR-015](adr/015-session-coordinator.md) | Session Coordinator | Control Session als primäre Einheit; Control Server = GSA; Ephemeral + Checkpoint; SFU Event-Push |
 | [ADR-016](adr/016-session-correlation-id.md) | Session Correlation ID | ULID; Control Server generiert bei CONNECTING→CONNECTED; Vehicle-ID→Session-ID→Event-ID; JWT = Identity only |
+| [ADR-017](adr/017-logging-strategy.md) | Logging Strategy | Hybrid: Technical async (slog → Loki); Safety sync (AuditWriter.WriteSync); 3 Log-Klassen; Frontend via POST /log |
+| [ADR-018](adr/018-audit-trail-strategy.md) | Audit Trail Strategy | SQLite WAL als AuditWriter; fsync vor SAFE_MODE; garantierte Safety-Event-Persistenz; kein extra Service |

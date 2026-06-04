@@ -56,3 +56,13 @@ export async function emergencyStop(sessionId: string, vehicleId: string): Promi
     }),
   })
 }
+
+// Reports WebRTC MEDIA STATE changes to the Control Server (ADR-009 Invariant 1).
+// MEDIA_FAILED → DEGRADED on server side — never SAFE_MODE.
+export async function reportMediaState(state: string): Promise<void> {
+  await fetch('/api/media/event', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ state }),
+  })
+}

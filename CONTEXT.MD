@@ -244,9 +244,10 @@ JWT = Identity (Wer bist du?) ≠ Session-ID (In welchem Kontext?)
 
 | Frage | Blockiert | Referenz |
 |-------|-----------|----------|
-| Prioritätsmodell technisch (Channels vs. Header-Flag) | Phase 4 | ADR-008 Folge |
-| Session Recording Storage (DB/Files/Object Storage) | BE-07 | ADR-005 Folge |
+| Prioritätsmodell technisch (Channels vs. Header-Flag) | TEST-05 / Sprint 6 | ADR-008 Folge — BE-04 nutzt Publisher-Pattern; explizite Channel-Trennung noch offen |
+| Session Recording Storage (DB / Files / Object Storage) | nach Sprint 6 | ADR-005 Folge — MemoryRecorder seit Sprint 4 als Platzhalter aktiv; Storage-ADR ausstehend |
 | DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
+| Backup-Strategie Audit Store (SQLite Volume) | nach LOG-10 | ADR-019 möglich — SQLite-Volume-Sicherung für Produktivbetrieb |
 
 ---
 
@@ -261,3 +262,5 @@ JWT = Identity (Wer bist du?) ≠ Session-ID (In welchem Kontext?)
 7. **No Auto-Resume** — nach CRITICAL Failure immer Operator-Ack (ADR-009/010)
 8. **Global Session Authority** — Control Server ist einziger Session-Erzeuger und Single Source of Truth (ADR-015)
 9. **Correlation-First** — alle Kanäle tragen Session-ID (ULID); vollständige Rekonstruierbarkeit (ADR-016)
+10. **Hybrid Logging** — Technical Logs async (slog → Loki); Safety Events sync (AuditWriter.WriteSync + fsync vor SAFE_MODE); drei Log-Klassen (ADR-017/018)
+11. **Safety-Log-Garantie** — Safety Events dürfen niemals verloren gehen; separater SQLite Audit Store orthogonal zu Loki (ADR-018)
