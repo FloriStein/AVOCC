@@ -1,0 +1,79 @@
+name: avoc-test
+
+# Minimaler Stack für Integration Tests (ADR-006).
+# Kein WebRTC/coturn — zu flaky in CI (E2E-Tests sind non-blocking per ADR-006).
+# Läuft isoliert auf anderen Ports um Konflikte mit dem Dev-Stack zu vermeiden.
+
+services:
+
+  control-server:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/go-service.Dockerfile
+      args:
+        SERVICE_NAME: control-server
+    ports:
+      - "18080:8080"
+    environment:
+      CONTROL_PORT: "8080"
+      JWT_SECRET: "test-secret-integration"
+      SAFETY_SERVICE_URL: "http://safety-service:8082"
+      SFU_SERVICE_URL: "http://localhost:8084"   # SFU läuft nicht im Test-Stack
+      AUTH_SERVICE_URL: "http://auth-service:8081"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      safety-service:
+        condition: service_healthy
+    networks:
+      - avoc-test-net
+
+  auth-service:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/go-service.Dockerfile
+      args:
+        SERVICE_NAME: auth-service
+    ports:
+      - "18081:8081"
+    environment:
+      AUTH_PORT: "8081"
+      JWT_SECRET: "test-secret-integration"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/health"]
+      interval: 3s
+      timeout: 5s
+      retries: 5
+    networks:
+      - avoc-test-net
+
+  safety-service:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/go-service.Dockerfile
+      args:
+        SERVICE_NAME: safety-service
+    ports:
+      - "18082:8082"
+    environment:
+      SAFETY_PORT: "8082"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/health"]
+      interval: 3s
+      timeout: 5s
+      retries: 5
+    networks:
+      - avoc-test-net
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "11883:1883"
+    volumes:
+      - ./mosquitto-test.conf:/mosquitto/config/mosquitto.conf:ro
+    networks:
+      - avoc-test-net
+
+networks:
+  avoc-test-net:
+    driver: bridge

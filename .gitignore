@@ -13,6 +13,9 @@ frontend/node_modules/
 .env.local
 .env.*.local
 
+# Docker Hub username helper (optional local file for make push)
+.docker-username
+
 # IDE
 .idea/
 .vscode/

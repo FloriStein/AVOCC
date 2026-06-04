@@ -23,6 +23,7 @@
 | [ADR-016](docs/adr/016-session-correlation-id.md) | Session Correlation ID | Accepted | ULID; Control Server generiert bei CONNECTING→CONNECTED; Vehicle-ID→Session-ID→Event-ID; JWT = Identity only |
 | [ADR-017](docs/adr/017-logging-strategy.md) | Logging Strategy | Accepted | Hybrid: Technical Logs async (slog → Loki); Safety Events sync (AuditWriter.WriteSync); 3 Log-Klassen; Frontend via POST /log; Interface-first (ADR-018) |
 | [ADR-018](docs/adr/018-audit-trail-strategy.md) | Audit Trail Strategy | Accepted | SQLite WAL (embedded, kein extra Service) als AuditWriter-Implementierung; garantierte Persistenz Safety Events; fsync vor SAFE_MODE |
+| [ADR-019](docs/adr/019-deployment-strategy.md) | Deployment-Strategie | Accepted | Docker Hub private Repos + EC2 Elastic IP + AWS SSM Parameter Store; linux/amd64; kein Quellcode auf EC2; deploy.sh als Deployment-Mechanismus |
 
 ## Offene Folge-Entscheidungen
 
@@ -31,4 +32,7 @@
 | Prioritätsmodell technisch (getrennte Channels vs. Header-Flag) | offen | ADR-008 Folge — BE-04 nutzt Publisher-Pattern; explizite Channel-Trennung noch offen |
 | Session Recording Storage (DB/Files/Object Storage) | offen | ADR-005 Folge — MemoryRecorder seit Sprint 4 als Platzhalter aktiv; Storage-ADR ausstehend |
 | DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge — Safety Event Bus als DDS-Drop-in implementiert |
-| Backup-Strategie Audit Store (SQLite Volume) | nach LOG-10 | ADR-019 möglich — SQLite-Volume-Sicherung, Replikation für Produktivbetrieb |
+| Backup-Strategie Audit Store (SQLite Volume → S3) | nach Sprint 8 | ADR-018 Folge — S3-Bucket im CDK vorhanden; ADR-020 möglich |
+| Migration zu AWS ECR | nach Sprint 8 | ADR-019 Folge — für Produktivbetrieb sinnvoll (IAM statt Docker Hub Credentials) |
+| HTTPS / TLS-Terminierung auf EC2 | nach Sprint 8 | ADR-019 Folge — für Testphase HTTP akzeptabel |
+| MQTT-Authentifizierung (Mosquitto Passwort-File) | nach Sprint 8 | Port 1883 aktuell ohne Auth offen — Vehicle-IP-Einschränkung in SG empfohlen |

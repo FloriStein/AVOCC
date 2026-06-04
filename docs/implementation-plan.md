@@ -1,13 +1,13 @@
 # Implementation Plan — Teleoperation System
 
 Stand: 2026-06-04
-Status: Phase 1/2/3/4/5/6/7 abgeschlossen ✅ — alle 42 Tasks · 18 ADRs
+Status: Phase 1/2/3/4/5/6/7 abgeschlossen ✅ — Phase 8 laufend · 49 Tasks · 19 ADRs
 
 ---
 
 ## 1. Executive Summary
 
-Wir bauen ein sicheres, modulares Echtzeit-Teleoperation-System zur Fernsteuerung von Fahrzeugen über das offene Internet (Vehicle ↔ Internet ↔ OCC, uncontrolled routing). Die Architektur ist durch 18 ADRs entschieden. Nach 7 Sprints (42 Tasks) ist das System vollständig produktionsbereit: Frontend, Backend, Video-Channel, Test-Infrastruktur und das Logging-System (ADR-017/018) mit strukturiertem slog, SQLite Audit Trail und Loki + Grafana sind implementiert.
+Wir bauen ein sicheres, modulares Echtzeit-Teleoperation-System zur Fernsteuerung von Fahrzeugen über das offene Internet (Vehicle ↔ Internet ↔ OCC, uncontrolled routing). Die Architektur ist durch 18 ADRs entschieden. Nach 7 Sprints (42 Tasks) ist das System vollständig implementiert: Frontend, Backend, Video-Channel, Test-Infrastruktur und das Logging-System (ADR-017/018) mit strukturiertem slog, SQLite Audit Trail und Loki + Grafana sind implementiert. Sprint 8 bringt das System auf AWS EC2 via Docker Hub (ADR-019).
 
 **Nicht-Verhandelbar:**
 - Safety First — SAFE MODE ist nicht überbrückbar, Video darf SAFE MODE nie triggern
@@ -354,10 +354,26 @@ BE-11 ─────────────────────┘
 
 ---
 
+### Phase 8 — EC2 Deployment via Docker Hub (ADR-019) 🔲 *(Sprint 8, laufend)*
+
+**Ziel:** System auf AWS EC2 deploybar — kein Quellcode auf der Instanz, Images aus Docker Hub, Secrets aus AWS SSM Parameter Store.
+
+| ID | Task | Typ | Abhängigkeiten |
+|----|------|-----|----------------|
+| DEPLOY-01 | ADR-019 — Deployment-Strategie (Docker Hub + EC2 + SSM Parameter Store) | L | — |
+| DEPLOY-02 | Makefile `build-prod` + `push` — alle Images `linux/amd64`, Docker Hub Tags | M | DEPLOY-01 |
+| DEPLOY-03 | `infrastructure/compose/docker-compose.prod.yml` — `image:` statt `build:` | M | DEPLOY-02 |
+| DEPLOY-04 | `scripts/setup-ssm.sh` + `scripts/deploy.sh` — SSM-Integration | M | DEPLOY-01 |
+| DEPLOY-05 | coturn EC2-Konfiguration — `external-ip` via `TURN_EXTERNAL_IP` ENV | M | DEPLOY-01 |
+| DEPLOY-06 | Grafana Security — Login-Form + Admin-Credentials aus SSM | S | DEPLOY-03 |
+| DEPLOY-07 | EC2 Bootstrap Guide — IAM, Security Groups, First Deploy | M | DEPLOY-03, DEPLOY-04, DEPLOY-05 |
+
+---
+
 ## 9. Vollständige Task-Übersicht
 
 ```
-42 Tasks gesamt / 7 Epics — alle abgeschlossen ✅
+49 Tasks gesamt / 8 Epics — Phase 1–7 abgeschlossen ✅, Phase 8 laufend 🔲
 
 Phase 1 ✅ (Sprint 1): INFRA-01, FE-01, BE-01, BE-02, BE-03, BE-11, DC-01, DC-02, DC-03
 Phase 2 ✅:            BE-06, BE-09, BE-10, BE-12, TEST-01, TEST-02
@@ -366,6 +382,7 @@ Phase 4 ✅:            BE-04, BE-05, BE-07, BE-08
 Phase 5 ✅:            FE-05, FE-06, FE-07
 Phase 6 ✅:            TEST-03, TEST-04, TEST-05, DC-04
 Phase 7 ✅:            LOG-01..11
+Phase 8 🔲 (Sprint 8): DEPLOY-01✅, DEPLOY-02..07
 ```
 
 ---
@@ -377,11 +394,14 @@ Phase 7 ✅:            LOG-01..11
 | Prioritätsmodell technisch (Channels vs. Header-Flag) | offen | ADR-008 Folge — BE-04 nutzt Publisher-Pattern; explizite Channel-Trennung noch offen |
 | Session Recording Storage (DB/Files/Object Storage) | offen | ADR-005 Folge — MemoryRecorder als Platzhalter; Storage-ADR ausstehend |
 | DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
-| Backup-Strategie Audit Store (SQLite Volume) | offen | ADR-019 möglich — SQLite-Volume-Sicherung für Produktivbetrieb |
+| Backup-Strategie Audit Store (SQLite Volume → S3) | nach Sprint 8 | ADR-018 Folge — S3-Bucket im CDK vorhanden; ADR-020 möglich |
+| Migration zu AWS ECR | nach Sprint 8 | ADR-019 Folge — für Produktivbetrieb |
+| HTTPS / TLS-Terminierung auf EC2 | nach Sprint 8 | ADR-019 Folge — für Testphase HTTP akzeptabel |
+| MQTT-Authentifizierung (Mosquitto Passwort-File) | nach Sprint 8 | Port 1883 aktuell ohne Auth offen |
 
 ---
 
-## 11. ADR-Index (18 ADRs)
+## 11. ADR-Index (19 ADRs)
 
 | ADR | Titel | Entscheidung |
 |-----|-------|-------------|
@@ -404,3 +424,4 @@ Phase 7 ✅:            LOG-01..11
 | [ADR-016](adr/016-session-correlation-id.md) | Session Correlation ID | ULID; Control Server generiert bei CONNECTING→CONNECTED; Vehicle-ID→Session-ID→Event-ID; JWT = Identity only |
 | [ADR-017](adr/017-logging-strategy.md) | Logging Strategy | Hybrid: Technical async (slog → Loki); Safety sync (AuditWriter.WriteSync); 3 Log-Klassen; Frontend via POST /log |
 | [ADR-018](adr/018-audit-trail-strategy.md) | Audit Trail Strategy | SQLite WAL als AuditWriter; fsync vor SAFE_MODE; garantierte Safety-Event-Persistenz; kein extra Service |
+| [ADR-019](adr/019-deployment-strategy.md) | Deployment-Strategie | Docker Hub private Repos + EC2 Elastic IP + AWS SSM Parameter Store; linux/amd64; kein Quellcode auf EC2 |

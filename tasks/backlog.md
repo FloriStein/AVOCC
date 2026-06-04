@@ -94,25 +94,42 @@ LOG-10 → LOG-11 (nach LOG-02)
 
 ---
 
-## Offene Entscheidungen (blockieren Tasks)
+## EPIC: Deployment (Sprint 8)
 
-| Entscheidung | Blockiert | Referenz |
-|---|---|---|
-| Session Recording Storage (DB / Files / Object Storage) | nach Sprint 7 | ADR-005 Folge — MemoryRecorder als Platzhalter |
-| DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
-| Backup-Strategie Audit Store (SQLite Volume) | nach LOG-10 | ADR-019 möglich — SQLite-Volume-Sicherung für Produktivbetrieb |
+| ID | Task | Typ | Status | Abhängigkeiten |
+|----|------|-----|--------|----------------|
+| DEPLOY-01 | ADR-019 — Deployment-Strategie (Docker Hub + EC2 + SSM) | L | ✅ Sprint 8 | — |
+| DEPLOY-02 | Makefile `build-prod` + `push` — linux/amd64, Docker Hub Tags | M | 🔲 Sprint 8 | DEPLOY-01 |
+| DEPLOY-03 | `docker-compose.prod.yml` — `image:` statt `build:`, prod Konfiguration | M | 🔲 Sprint 8 | DEPLOY-02 |
+| DEPLOY-04 | `scripts/setup-ssm.sh` + `scripts/deploy.sh` — SSM-Integration | M | 🔲 Sprint 8 | DEPLOY-01 |
+| DEPLOY-05 | coturn EC2-Konfiguration — `external-ip` via `TURN_EXTERNAL_IP` | M | 🔲 Sprint 8 | DEPLOY-01 |
+| DEPLOY-06 | Grafana Security — Login-Form + Admin-Credentials aus SSM | S | 🔲 Sprint 8 | DEPLOY-03 |
+| DEPLOY-07 | EC2 Bootstrap Guide — Checkliste für ersten Deploy ab null | M | 🔲 Sprint 8 | DEPLOY-03, DEPLOY-04, DEPLOY-05 |
 
 ---
 
-## Phasen-Übersicht (Restarbeit)
+## Offene Entscheidungen (blockieren zukünftige Tasks)
+
+| Entscheidung | Blockiert | Referenz |
+|---|---|---|
+| Session Recording Storage (DB / Files / Object Storage) | nach Sprint 8 | ADR-005 Folge — MemoryRecorder als Platzhalter |
+| DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
+| Backup-Strategie Audit Store (SQLite Volume → S3) | nach Sprint 8 | ADR-018 Folge — S3-Bucket im CDK vorhanden; ADR-020 möglich |
+| Migration zu AWS ECR | nach Sprint 8 | ADR-019 Folge — wenn Produktivbetrieb |
+| HTTPS / TLS-Terminierung auf EC2 | nach Sprint 8 | ADR-019 Folge — für Testphase HTTP akzeptabel |
+| MQTT-Authentifizierung (Mosquitto Passwort-File) | nach Sprint 8 | Port 1883 aktuell ohne Auth offen |
+
+---
+
+## Phasen-Übersicht
 
 ```
 Phase 6 — Testing & Quality Gates ✅ (abgeschlossen 2026-06-04)
-  TEST-03 ✅ Integration Test Infra (docker-compose.test.yml, 9 Go Tests)
-  TEST-04 ✅ Frontend Test Infra — Vitest 31/31 + Playwright E2E
-  TEST-05 ✅ Latenz-Tests CI (Go Benchmark p99=0ms, k6 p99=244µs)
-  DC-04   ✅ README Troubleshooting + Contributor Guide
+  TEST-03 ✅  TEST-04 ✅  TEST-05 ✅  DC-04 ✅
 
 Phase 7 — Logging & Audit Trail ✅ (abgeschlossen 2026-06-04)
-  LOG-01..11 alle abgeschlossen — Safety Regression 19/19 ✅
+  LOG-01..11 ✅ — Safety Regression 19/19 ✅
+
+Phase 8 — EC2 Deployment via Docker Hub (Sprint 8, laufend)
+  DEPLOY-01 ✅  DEPLOY-02..07 🔲
 ```

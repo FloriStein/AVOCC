@@ -1,0 +1,86 @@
+{
+  "title": "AVOC Session Dashboard",
+  "uid": "avoc-session",
+  "version": 1,
+  "schemaVersion": 38,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "session_id",
+        "type": "textbox",
+        "label": "Session ID",
+        "current": { "value": "" }
+      },
+      {
+        "name": "service",
+        "type": "query",
+        "label": "Service",
+        "datasource": { "type": "loki", "uid": "loki" },
+        "query": "label_values(service)",
+        "multi": true,
+        "includeAll": true,
+        "current": { "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "logs",
+      "title": "All Logs",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{service=~\"$service\"} |= \"$session_id\"",
+          "refId": "A"
+        }
+      ],
+      "options": { "showTime": true, "wrapLogMessage": true }
+    },
+    {
+      "id": 2,
+      "type": "logs",
+      "title": "Safety Events (EMERGENCY_STOP / SAFE_MODE / DEADMAN / ACK_TIMEOUT)",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{service=\"control-server\"} | json | event_type=~\"EMERGENCY_STOP|SAFE_MODE_ENTERED|DEADMAN_TIMEOUT|COMMAND_ACK_TIMEOUT|WS_DISCONNECT_CRITICAL\"",
+          "refId": "A"
+        }
+      ],
+      "options": { "showTime": true, "wrapLogMessage": true }
+    },
+    {
+      "id": 3,
+      "type": "logs",
+      "title": "Frontend Events",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{service=\"frontend\"}",
+          "refId": "A"
+        }
+      ],
+      "options": { "showTime": true, "wrapLogMessage": true }
+    },
+    {
+      "id": 4,
+      "type": "logs",
+      "title": "State Transitions",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{service=\"control-server\"} | json | event_type=\"STATE_TRANSITION_SYSTEM\"",
+          "refId": "A"
+        }
+      ],
+      "options": { "showTime": true, "wrapLogMessage": true }
+    }
+  ]
+}

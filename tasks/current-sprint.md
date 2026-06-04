@@ -1,22 +1,22 @@
-# Sprint 7 — Logging & Audit Trail
+# Sprint 8 — EC2 Deployment via Docker Hub
 
-Ziel: Vollständig strukturiertes Logging. Safety Events garantiert persistent. Grafana-Dashboard für Session-Rekonstruktion.
+Ziel: AVOC vollständig auf AWS EC2 deploybar — keine Quellcode-Kopie auf der Instanz, alle Images aus Docker Hub (linux/amd64), Secrets ausschließlich aus AWS SSM Parameter Store.
 
 Datum: 2026-06-04
-Vorgänger: Sprint 6 ✅ (Testing & Quality Gates — 31 Vitest Tests, 9 Integration Tests, k6 Latenz-CI)
+Vorgänger: Sprint 7 ✅ (Logging & Audit Trail — slog, SQLite Audit Store, Loki/Grafana)
 
 ---
 
-## Ausgangslage (aus Sprint 6)
+## Ausgangslage (aus Sprint 7)
 
 | Was existiert | Stand |
 |---------------|-------|
-| `make test-integration` | Test-Stack startet/stoppt automatisch — LOG-Tests können ihn nutzen |
-| `make test-safety` | Safety Gate 19/19 — Regression-Basis für LOG-11 (AuditWriter Integration) |
-| `pkg/ulid/` | ULID-Wrapper vorhanden — AuditWriter nutzt ihn für event_id |
-| Alle Services nutzen `log.Printf` | Wird in LOG-02..06 auf strukturierten Logger migriert |
-| ADR-017/018 | Architekturentscheidungen vollständig — kein offener Klärungsbedarf |
-| `modernc.org/sqlite` | Noch nicht in go.mod — wird in LOG-10 ergänzt |
+| `docker-compose.yml` | Entwicklungs-Compose — baut alle Services aus Quellcode |
+| `.env` / `.env.example` | Lokale Secrets-Datei — auf EC2 nicht zulässig |
+| `infrastructure/coturn/turnserver.conf` | Fehlt `external-ip` — für EC2 hinter NAT nötig |
+| `grafana` in Compose | `GF_AUTH_ANONYMOUS_ENABLED: true` + Admin-Rolle — auf EC2 Sicherheitsproblem |
+| CDK Stack (`cdk_server-stack.ts`) | Bereits aktualisiert: Port 3000, 8080, 1883, 3479, 10000–10050/udp, SSM IAM Policy |
+| ADR-019 | Deployment-Strategie entschieden ✅ |
 
 ---
 
@@ -24,229 +24,213 @@ Vorgänger: Sprint 6 ✅ (Testing & Quality Gates — 31 Vitest Tests, 9 Integra
 
 | ID | Task | Typ | Status | Abhängigkeiten |
 |----|------|-----|--------|----------------|
-| LOG-01 | `pkg/logger/` — strukturierter slog-Wrapper | M | ✅ Done | — |
-| LOG-02 | Control Server Migration | M | ✅ Done | LOG-01 |
-| LOG-03 | Auth Service Migration | S | ✅ Done | LOG-01 |
-| LOG-04 | Safety Service Migration | S | ✅ Done | LOG-01 |
-| LOG-05 | Telemetry Service Migration | S | ✅ Done | LOG-01 |
-| LOG-06 | WebRTC SFU Migration | S | ✅ Done | LOG-01 |
-| LOG-07 | `POST /log` Endpoint — Frontend Log-Ingestion | M | ✅ Done | LOG-02 |
-| LOG-08 | Frontend `logger.ts` + Integration | M | ✅ Done | LOG-07 |
-| LOG-09 | Loki + Grafana + Promtail Docker Compose | M | ✅ Done | LOG-01 |
-| LOG-10 | `pkg/audit/` — AuditWriter Interface + SQLiteAuditWriter | M | ✅ Done | LOG-01 |
-| LOG-11 | Control Server Safety-Event-Integration | M | ✅ Done | LOG-10, LOG-02 |
+| DEPLOY-01 | ADR-019 — Deployment-Strategie dokumentieren | L | ✅ Done | — |
+| DEPLOY-02 | Makefile `build-prod` + `push` — linux/amd64, Docker Hub Tags | M | 🔲 Open | DEPLOY-01 |
+| DEPLOY-03 | `infrastructure/compose/docker-compose.prod.yml` — `image:` statt `build:` | M | 🔲 Open | DEPLOY-02 |
+| DEPLOY-04 | `scripts/setup-ssm.sh` + `scripts/deploy.sh` — SSM-Integration | M | 🔲 Open | DEPLOY-01 |
+| DEPLOY-05 | coturn EC2-Konfiguration — `external-ip` via `TURN_EXTERNAL_IP` | M | 🔲 Open | DEPLOY-01 |
+| DEPLOY-06 | Grafana Security — Login-Form + Admin-Credentials aus SSM | S | 🔲 Open | DEPLOY-03 |
+| DEPLOY-07 | EC2 Bootstrap Guide — Checkliste für ersten Deploy ab null | M | 🔲 Open | DEPLOY-03, DEPLOY-04, DEPLOY-05 |
 
 ---
 
 ## Abhängigkeitspfad
 
 ```
-LOG-01 → LOG-02..06 (parallel) → LOG-07 → LOG-08
-       ↘
-        LOG-09 (parallel zu allem)
-       ↘
-        LOG-10 → LOG-11 (nach LOG-02)
+DEPLOY-01 (✅) → DEPLOY-02 → DEPLOY-03 ──────────────────────────┐
+               ↘ DEPLOY-04 ────────────────────────────────────────▶ DEPLOY-07
+               ↘ DEPLOY-05 ────────────────────────────────────────▶
+               ↘ DEPLOY-06 (in DEPLOY-03 eingebettet) ────────────▶
 ```
 
 ---
 
 ## Implementierungsdetails je Task
 
-### LOG-01 — `pkg/logger/` slog-Wrapper
+### DEPLOY-02 — Makefile `build-prod` + `push`
 
-**Neue Dateien:** `pkg/logger/logger.go`, `pkg/logger/event_types.go`
+**Neue Targets in `Makefile`:**
 
-**API:**
-```go
-// Erstellt Logger für einen Service
-log := logger.New("control-server")
+```makefile
+# Docker Hub Registry — überschreibbar: DOCKER_USERNAME=foo make push
+DOCKER_USERNAME ?= $(shell cat .docker-username 2>/dev/null || echo "DOCKER_USERNAME_NOT_SET")
+REGISTRY        := docker.io/$(DOCKER_USERNAME)
+VERSION         ?= latest
+PLATFORM        := linux/amd64
+GO_SERVICES     := control-server auth-service safety-service telemetry-service webrtc-sfu
 
-// Technical Log (async → stdout → Loki)
-log.Info("WebSocket connected", "subject", "op-1", "role", "ACTIVE_OPERATOR")
+build-prod:
+	@echo "Building all images for $(PLATFORM)..."
+	@for svc in $(GO_SERVICES); do \
+		echo "  → avoc-$$svc"; \
+		docker buildx build --platform $(PLATFORM) \
+			--build-arg SERVICE_NAME=$$svc \
+			-t $(REGISTRY)/avoc-$$svc:$(VERSION) \
+			-f infrastructure/docker/go-service.Dockerfile . --load; \
+	done
+	@echo "  → avoc-frontend"
+	docker buildx build --platform $(PLATFORM) \
+		-t $(REGISTRY)/avoc-frontend:$(VERSION) \
+		-f infrastructure/docker/frontend.Dockerfile . --load
 
-// Structured Safety/Audit Event (mit session-Kontext)
-log.Event(ctx, logger.EventEmergencyStop,
-    "Emergency Stop received",
-    "session_id", sessionID,
-    "vehicle_id", vehicleID,
-    "operator_id", operatorID,
-    "event_id", ulid.Generate(),
-)
+push: build-prod
+	@echo "Pushing all images to $(REGISTRY)..."
+	@for svc in $(GO_SERVICES); do docker push $(REGISTRY)/avoc-$$svc:$(VERSION); done
+	docker push $(REGISTRY)/avoc-frontend:$(VERSION)
+	@echo "Push complete. Deploy on EC2: bash scripts/deploy.sh"
 ```
 
-**`event_types.go`:** alle Event-Types aus ADR-017 als typisierte Konstanten
-```go
-const (
-    EventSessionStarted     = "SESSION_STARTED"
-    EventSessionEnded       = "SESSION_ENDED"
-    EventSafeModeEntered    = "SAFE_MODE_ENTERED"
-    EventEmergencyStop      = "EMERGENCY_STOP"
-    EventDeadmanTimeout     = "DEADMAN_TIMEOUT"
-    EventDeadmanArmed       = "DEADMAN_ARMED"
-    EventAckTimeout         = "COMMAND_ACK_TIMEOUT"
-    EventWsDisconnect       = "WS_DISCONNECT_CRITICAL"
-    EventOperatorHandover   = "OPERATOR_HANDOVER_COMPLETED"
-    EventStateTransition    = "STATE_TRANSITION_SYSTEM"
-    EventCommandReceived    = "COMMAND_RECEIVED"
-    EventMediaStateChange   = "MEDIA_STATE_CHANGE"
-    // Frontend events
-    EventFEEmergencyStop    = "FE_EMERGENCY_STOP_CLICKED"
-    EventFEDeadmanHold      = "FE_DEADMAN_HOLD"
-    EventFEWebRTCState      = "FE_WEBRTC_STATE_CHANGE"
-    EventFEWSReconnect      = "FE_WS_RECONNECT"
-    EventFEOperatorAck      = "FE_OPERATOR_ACK_CLICKED"
-)
+**Image-Naming:**
 ```
-
-**Level per ENV:** `LOG_LEVEL=debug|info|warn|error` (default: `info`)
-
----
-
-### LOG-02..06 — Service-Migrationen
-
-Alle `log.Printf("[TAG] message")` Calls → `log.Event()` oder `log.Info/Warn/Error()`.
-
-| Service | Haupt-Events |
-|---------|-------------|
-| **control-server** | SESSION_STARTED/ENDED, STATE_TRANSITION_*, SAFE_MODE_ENTERED, EMERGENCY_STOP, DEADMAN_ARMED/TIMEOUT, ACK_TIMEOUT, WS_DISCONNECT, COMMAND_RECEIVED |
-| **auth-service** | Service-Start, Login, Token-Ausstellung, Fehler |
-| **safety-service** | EmergencyStop-Event, Bus-Events |
-| **telemetry-service** | MQTT connect/disconnect, MESSAGE_RECEIVED |
-| **webrtc-sfu** | Session-Events (SESSION_CREATED..ENDED), ICE-State-Changes |
-
----
-
-### LOG-07 — `POST /log` Endpoint
-
-**Control Server** erhält Frontend-Logs:
-```go
-// cmd/control-server/main.go
-mux.HandleFunc("POST /log", func(w http.ResponseWriter, r *http.Request) {
-    var entry struct {
-        Level     string         `json:"level"`
-        EventType string         `json:"event_type"`
-        SessionID string         `json:"session_id"`
-        VehicleID string         `json:"vehicle_id"`
-        OperatorID string        `json:"operator_id"`
-        EventID   string         `json:"event_id"`
-        Message   string         `json:"msg"`
-        Data      map[string]any `json:"data,omitempty"`
-    }
-    // Validiert session_id wenn vorhanden, loggt mit service="frontend"
-})
+docker.io/<USERNAME>/avoc-control-server:latest
+docker.io/<USERNAME>/avoc-auth-service:latest
+docker.io/<USERNAME>/avoc-safety-service:latest
+docker.io/<USERNAME>/avoc-telemetry-service:latest
+docker.io/<USERNAME>/avoc-webrtc-sfu:latest
+docker.io/<USERNAME>/avoc-frontend:latest
 ```
 
 ---
 
-### LOG-08 — Frontend `logger.ts`
+### DEPLOY-03 — `docker-compose.prod.yml`
 
-**Neue Datei:** `frontend/src/lib/logger.ts`
+Alle Custom-Services: `image: ${REGISTRY}/avoc-<service>:${VERSION}` statt `build:`.
 
-```typescript
-// Sendet strukturierte Log-Events an Control Server (POST /api/log)
-export function logEvent(
-  eventType: string,
-  msg: string,
-  context: { sessionId?: string; vehicleId?: string; operatorId?: string; data?: Record<string, unknown> }
-): void
-```
+Drittanbieter-Images (mosquitto, loki, promtail, grafana, coturn) bleiben unverändert.
 
-**Integration in:** useDeadmanSwitch, SafetyPanel (E-Stop), useWebRTC, useSession (WS-Reconnect), SafeModeOverlay (Operator-Ack).
+Env-Variablen werden nicht aus `.env` geladen — sondern vom aufrufenden `deploy.sh` als
+Shell-Exports bereitgestellt.
+
+**Abweichungen von `docker-compose.yml`:**
+- Kein `build:` in irgendeinem Service
+- coturn: `command`-Override mit `--external-ip=${TURN_EXTERNAL_IP}`
+- Grafana: kein Anonymous-Admin (DEPLOY-06)
+- Volumes identisch (audit-data, loki-data, grafana-data)
 
 ---
 
-### LOG-09 — Loki + Grafana + Promtail
+### DEPLOY-04 — SSM-Scripts
 
-**Neue Infrastruktur:**
-```
-infrastructure/
-├── loki/
-│   └── loki.yml              # Loki v3 Config (filesystem storage, TTL 30d)
-├── promtail/
-│   └── promtail.yml          # Docker Service Discovery, JSON Pipeline
-└── grafana/
-    └── provisioning/
-        ├── datasources/loki.yml   # Loki DataSource auto-provision
-        └── dashboards/
-            ├── dashboards.yml
-            └── avoc.json          # AVOC Session Dashboard
+**`scripts/setup-ssm.sh`** — einmalig vom Dev-Rechner:
+```bash
+#!/bin/bash
+# Legt alle AVOC SSM-Parameter unter /avoc/prod/ an.
+# Voraussetzung: aws cli konfiguriert, ausreichende IAM-Rechte.
+REGION=${AWS_REGION:-eu-central-1}
+
+put_secure() { aws ssm put-parameter --region "$REGION" --name "$1" --value "$2" \
+  --type SecureString --overwrite; }
+put_string() { aws ssm put-parameter --region "$REGION" --name "$1" --value "$2" \
+  --type String --overwrite; }
+
+put_secure  /avoc/prod/jwt-secret          "<STARKES_SECRET_MIN_32_ZEICHEN>"
+put_string  /avoc/prod/turn-external-ip    "<ELASTIC_IP>"
+put_string  /avoc/prod/turn-realm          "avoc.example.com"
+put_string  /avoc/prod/turn-user           "avoc"
+put_secure  /avoc/prod/turn-password       "<TURN_PASSWORT>"
+put_string  /avoc/prod/grafana-admin-user  "admin"
+put_secure  /avoc/prod/grafana-admin-password "<GRAFANA_PASSWORT>"
+put_string  /avoc/prod/docker-username     "<DOCKER_HUB_USERNAME>"
+put_secure  /avoc/prod/docker-password     "<DOCKER_HUB_ACCESS_TOKEN>"
 ```
 
-**docker-compose.yml Erweiterung:**
+**`scripts/deploy.sh`** — auf EC2 ausführen:
+```bash
+#!/bin/bash
+set -euo pipefail
+REGION=${AWS_REGION:-eu-central-1}
+APP_DIR=/home/ec2-user/app
+
+get()        { aws ssm get-parameter --region "$REGION" --name "$1" \
+               --query Parameter.Value --output text; }
+get_secure() { aws ssm get-parameter --region "$REGION" --name "$1" \
+               --with-decryption --query Parameter.Value --output text; }
+
+export JWT_SECRET=$(get_secure /avoc/prod/jwt-secret)
+export TURN_EXTERNAL_IP=$(get      /avoc/prod/turn-external-ip)
+export TURN_REALM=$(get            /avoc/prod/turn-realm)
+export TURN_USER=$(get             /avoc/prod/turn-user)
+export TURN_PASSWORD=$(get_secure  /avoc/prod/turn-password)
+export GRAFANA_ADMIN_USER=$(get    /avoc/prod/grafana-admin-user)
+export GRAFANA_ADMIN_PASSWORD=$(get_secure /avoc/prod/grafana-admin-password)
+DOCKER_USERNAME=$(get              /avoc/prod/docker-username)
+DOCKER_PASSWORD=$(get_secure       /avoc/prod/docker-password)
+export REGISTRY="docker.io/${DOCKER_USERNAME}"
+export VERSION=${VERSION:-latest}
+
+echo "$DOCKER_PASSWORD" | docker login --username "$DOCKER_USERNAME" --password-stdin
+
+cd "$APP_DIR"
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+echo "Deploy complete — $(date)"
+```
+
+---
+
+### DEPLOY-05 — coturn EC2-Konfiguration
+
+**Problem:** `turnserver.conf` hat kein `external-ip` — ohne diesen Parameter weiß coturn
+nicht, welche öffentliche IP es gegenüber Clients ankündigen soll. TURN relay funktioniert
+hinter NAT nicht korrekt.
+
+**Lösung:** In `docker-compose.prod.yml` den coturn-Command überschreiben:
 ```yaml
-loki:      # Port 3100
-grafana:   # Port 3001 (3000 ist Frontend)
-promtail:  # kein Port (liest Docker-Logs)
+stun-turn:
+  image: coturn/coturn:latest
+  command: >
+    --external-ip=${TURN_EXTERNAL_IP}
+    --realm=${TURN_REALM}
+    --user=${TURN_USER}:${TURN_PASSWORD}
+    --fingerprint
+    --lt-cred-mech
+    --no-cli
+    --log-file=stdout
+    --min-port=49160
+    --max-port=49200
+  ports:
+    - "3479:3478/udp"
+    - "3479:3478/tcp"
+    - "49160-49200:49160-49200/udp"
 ```
 
-**Promtail Pipeline** extrahiert `session_id`, `event_type`, `level` als Labels.
+Der `command`-Override ersetzt die Config-Datei vollständig — alle nötigen Flags werden
+inline gesetzt. Keine Dependency auf `turnserver.conf` für EC2-Betrieb.
 
 ---
 
-### LOG-10 — `pkg/audit/` AuditWriter + SQLiteAuditWriter
+### DEPLOY-06 — Grafana Security
 
-**Neue Dateien:** `pkg/audit/writer.go`, `pkg/audit/sqlite_writer.go`, `pkg/audit/noop_writer.go`
-
-**Schema:**
-```sql
-CREATE TABLE audit_events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_id TEXT NOT NULL UNIQUE,
-    session_id TEXT NOT NULL,
-    vehicle_id TEXT NOT NULL,
-    operator_id TEXT NOT NULL,
-    event_type TEXT NOT NULL,
-    reason TEXT,
-    system_state TEXT,
-    ctrl_state TEXT,
-    data TEXT,            -- JSON
-    timestamp TEXT NOT NULL,
-    written_at TEXT NOT NULL
-);
-CREATE INDEX idx_session ON audit_events(session_id);
-CREATE INDEX idx_event_type ON audit_events(event_type);
+In `docker-compose.prod.yml`:
+```yaml
+grafana:
+  environment:
+    GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+    GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    GF_AUTH_ANONYMOUS_ENABLED: "false"
+    GF_AUTH_DISABLE_LOGIN_FORM: "false"
+    # GF_AUTH_ANONYMOUS_ORG_ROLE entfernt
 ```
-
-**Storage:** `/data/audit/avoc_audit.db` — Docker Volume `audit-data`.
 
 ---
 
-### LOG-11 — Control Server Safety-Event-Integration
+### DEPLOY-07 — EC2 Bootstrap Guide
 
-Alle Safety-Trigger schreiben synchron via `AuditWriter.WriteSync()` **vor** SAFE_MODE-Transition:
+Neue Datei: `docs/deployment/ec2-bootstrap.md`
 
-```go
-// In detector.go fire():
-auditEvent := audit.SafetyAuditEvent{
-    EventID:     ulid.Generate(),
-    SessionID:   w.sessionID,
-    EventType:   logger.EventDeadmanTimeout,
-    Reason:      "dead-man switch timeout",
-    SystemState: "CONNECTED",
-    Timestamp:   time.Now(),
-}
-if err := w.auditWriter.WriteSync(auditEvent); err != nil {
-    // Schreibfehler = CRITICAL → trotzdem SAFE_MODE
-    log.Error("audit write failed", "error", err)
-}
-// DANN erst SAFE_MODE-Transition
-w.sm.TransitionSystem(statemachine.StateSafeMode)
-```
-
-**Query-Endpoint:** `GET /audit/events?session_id=<ulid>` → JSON-Array der Safety-Events.
+Inhalt: IAM Instance Profile (SSM Read Policy bereits im CDK), Security Group Ports
+(bereits im CDK), Docker Compose Plugin installieren (manuell, da UserData nicht erneut
+läuft), `setup-ssm.sh` ausführen, deploy.sh auf EC2 kopieren, erster Deploy.
 
 ---
 
 ## Sprint-Ziel / Definition of Done
 
-- [x] `pkg/logger/logger.go` — `logger.New()`, `Event()`, Level-Konfiguration per `LOG_LEVEL` ENV
-- [x] Alle `log.Printf` in 6 Go-Services migriert → strukturiertes JSON auf stdout
-- [x] `POST /log` Endpunkt am Control Server — Frontend-Logs landen mit `service="frontend"`
-- [x] `frontend/src/lib/logger.ts` — Events für E-Stop, WebRTC, Operator-Ack
-- [x] Loki + Grafana + Promtail in `docker-compose up` (Ports 3100, 3001)
-- [x] LogQL `{service="control-server"} | json | event_type="EMERGENCY_STOP"` liefert Treffer
-- [x] `pkg/audit/` — AuditWriter Interface + SQLiteAuditWriter + NoopWriter
-- [x] Safety Events werden synchron in SQLite geschrieben bevor SAFE_MODE-Transition
-- [x] `GET /audit/events?session_id=<ulid>` liefert JSON-Array
-- [x] Safety Regression: 19/19 grün ✅
-- [x] `docker-compose up --build` — alle Services healthy, JSON-Logs auf stdout ✅
+- [ ] ADR-019 dokumentiert ✅
+- [ ] `make push` baut alle 6 Images für `linux/amd64` und pushed nach Docker Hub
+- [ ] `docker-compose.prod.yml` läuft auf EC2 ohne Quellcode (`image:` statt `build:`)
+- [ ] `scripts/deploy.sh` holt Secrets aus SSM — kein `.env` auf der Instanz
+- [ ] coturn kennt die Elastic IP (`--external-ip` gesetzt), TURN relay funktioniert
+- [ ] Grafana Login-Formular aktiv, kein Anonymous-Admin
+- [ ] EC2 Bootstrap Guide vollständig — System ab null deploybar
+- [ ] Safety Regression: 19/19 grün ✅ (kein Rückschritt durch Deployment-Änderungen)
