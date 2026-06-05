@@ -15,7 +15,7 @@
 set -euo pipefail
 
 REGION=${AWS_REGION:-eu-central-1}
-APP_DIR=${APP_DIR:-/home/ec2-user/app}
+APP_DIR=${APP_DIR:-$(eval echo ~)/app}
 VERSION=${VERSION:-latest}
 
 echo "=== AVOC Deploy === Region: $REGION  Version: $VERSION"

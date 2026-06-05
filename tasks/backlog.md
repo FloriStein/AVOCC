@@ -3,7 +3,7 @@
 Lifecycle: backlog → sprint → done
 Typen: S (<30 Min), M (30–180 Min), L (Architektur, ADR-pflichtig)
 
-Stand: 2026-06-04 — aktualisiert nach Sprint 1/2/3/4/5/6 + ADR-017/018 (Logging & Audit Trail)
+Stand: 2026-06-05 — aktualisiert nach Sprint 8 (EC2 Deployment) + Sprint 9 (Video Stream, laufend)
 
 ---
 
@@ -94,17 +94,33 @@ LOG-10 → LOG-11 (nach LOG-02)
 
 ---
 
-## EPIC: Deployment (Sprint 8)
+## EPIC: Deployment (Sprint 8) ✅
 
 | ID | Task | Typ | Status | Abhängigkeiten |
 |----|------|-----|--------|----------------|
 | DEPLOY-01 | ADR-019 — Deployment-Strategie (Docker Hub + EC2 + SSM) | L | ✅ Sprint 8 | — |
-| DEPLOY-02 | Makefile `build-prod` + `push` — linux/amd64, Docker Hub Tags | M | 🔲 Sprint 8 | DEPLOY-01 |
-| DEPLOY-03 | `docker-compose.prod.yml` — `image:` statt `build:`, prod Konfiguration | M | 🔲 Sprint 8 | DEPLOY-02 |
-| DEPLOY-04 | `scripts/setup-ssm.sh` + `scripts/deploy.sh` — SSM-Integration | M | 🔲 Sprint 8 | DEPLOY-01 |
-| DEPLOY-05 | coturn EC2-Konfiguration — `external-ip` via `TURN_EXTERNAL_IP` | M | 🔲 Sprint 8 | DEPLOY-01 |
-| DEPLOY-06 | Grafana Security — Login-Form + Admin-Credentials aus SSM | S | 🔲 Sprint 8 | DEPLOY-03 |
-| DEPLOY-07 | EC2 Bootstrap Guide — Checkliste für ersten Deploy ab null | M | 🔲 Sprint 8 | DEPLOY-03, DEPLOY-04, DEPLOY-05 |
+| DEPLOY-02 | Makefile `build-prod` + `push` — linux/amd64, Docker Hub Tags | M | ✅ Sprint 8 | DEPLOY-01 |
+| DEPLOY-03 | `docker-compose.prod.yml` — `image:` statt `build:`, prod Konfiguration | M | ✅ Sprint 8 | DEPLOY-02 |
+| DEPLOY-04 | `scripts/setup-ssm.sh` + `scripts/deploy.sh` — SSM-Integration | M | ✅ Sprint 8 | DEPLOY-01 |
+| DEPLOY-05 | coturn EC2-Konfiguration — `external-ip` via `TURN_EXTERNAL_IP` | M | ✅ Sprint 8 | DEPLOY-01 |
+| DEPLOY-06 | Grafana Security — Login-Form + Admin-Credentials aus SSM | S | ✅ Sprint 8 | DEPLOY-03 |
+| DEPLOY-07 | EC2 Bootstrap Guide — Checkliste für ersten Deploy ab null | M | ✅ Sprint 8 | DEPLOY-03, DEPLOY-04, DEPLOY-05 |
+
+---
+
+## EPIC: Video Stream (Sprint 9, laufend)
+
+| ID | Task | Typ | Status | Abhängigkeiten |
+|----|------|-----|--------|----------------|
+| STREAM-01 | ADR-020 — MediaMTX als WHIP/WHEP Router | L | 🔲 Sprint 9 | — |
+| STREAM-02 | `infrastructure/mediamtx/mediamtx.yml` + Docker Service | M | 🔲 Sprint 9 | STREAM-01 |
+| STREAM-03 | nginx: `/whep/` Proxy | S | 🔲 Sprint 9 | STREAM-02 |
+| STREAM-04 | `useWebRTC.ts` → WHEP-Protokoll + vehicleId-Prop | M | 🔲 Sprint 9 | STREAM-02 |
+| STREAM-05 | Control Server: `/internal/media/auth` + SAFE_MODE → MediaMTX API | M | 🔲 Sprint 9 | STREAM-02 |
+| STREAM-06 | TURN in MediaMTX ICE-Config + Compose env | S | 🔲 Sprint 9 | STREAM-02 |
+| STREAM-07 | CDK Port 8889 + SSM `whip-stream-key` + setup-ssm.sh | S | 🔲 Sprint 9 | — |
+| STREAM-08 | `docker-compose.prod.yml`: mediamtx + deploy.sh Update | S | 🔲 Sprint 9 | STREAM-02 |
+| STREAM-09 | Larix Setup Guide + E2E Smoke Test | S | 🔲 Sprint 9 | STREAM-07, STREAM-08 |
 
 ---
 
@@ -112,12 +128,14 @@ LOG-10 → LOG-11 (nach LOG-02)
 
 | Entscheidung | Blockiert | Referenz |
 |---|---|---|
-| Session Recording Storage (DB / Files / Object Storage) | nach Sprint 8 | ADR-005 Folge — MemoryRecorder als Platzhalter |
+| Session Recording Storage (DB / Files / Object Storage) | nach Sprint 9 | ADR-005 Folge — MemoryRecorder als Platzhalter |
 | DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
-| Backup-Strategie Audit Store (SQLite Volume → S3) | nach Sprint 8 | ADR-018 Folge — S3-Bucket im CDK vorhanden; ADR-020 möglich |
-| Migration zu AWS ECR | nach Sprint 8 | ADR-019 Folge — wenn Produktivbetrieb |
-| HTTPS / TLS-Terminierung auf EC2 | nach Sprint 8 | ADR-019 Folge — für Testphase HTTP akzeptabel |
-| MQTT-Authentifizierung (Mosquitto Passwort-File) | nach Sprint 8 | Port 1883 aktuell ohne Auth offen |
+| Backup-Strategie Audit Store (SQLite Volume → S3) | nach Sprint 9 | ADR-018 Folge — S3-Bucket im CDK vorhanden |
+| Migration zu AWS ECR | nach Sprint 9 | ADR-019 Folge — für Produktivbetrieb |
+| HTTPS / TLS-Terminierung auf EC2 | nach Sprint 9 | ADR-019 Folge — für Testphase HTTP akzeptabel |
+| MQTT-Authentifizierung (Mosquitto Passwort-File) | nach Sprint 9 | Port 1883 aktuell ohne Auth offen |
+| Multi-Vehicle / vehicleId-Routing in MediaMTX | Sprint 10 | ADR-020 Folge — Sprint 9 nutzt fixed path `vehicle-001` |
+| WHEP-Session-Zuordnung (mehrere Operatoren) | Sprint 10 | ADR-020 Folge |
 
 ---
 
@@ -130,6 +148,9 @@ Phase 6 — Testing & Quality Gates ✅ (abgeschlossen 2026-06-04)
 Phase 7 — Logging & Audit Trail ✅ (abgeschlossen 2026-06-04)
   LOG-01..11 ✅ — Safety Regression 19/19 ✅
 
-Phase 8 — EC2 Deployment via Docker Hub (Sprint 8, laufend)
-  DEPLOY-01 ✅  DEPLOY-02..07 🔲
+Phase 8 — EC2 Deployment via Docker Hub ✅ (abgeschlossen 2026-06-05)
+  DEPLOY-01..07 ✅
+
+Phase 9 — Video Stream: Larix WHIP → MediaMTX → Browser (Sprint 9, laufend)
+  STREAM-01..09 🔲
 ```

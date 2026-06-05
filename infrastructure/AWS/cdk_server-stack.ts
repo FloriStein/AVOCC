@@ -161,6 +161,7 @@ systemctl enable docker
 systemctl start docker
 
 usermod -aG docker ec2-user || true
+usermod -aG docker ssm-user || true
 
 mkdir -p /home/ec2-user/app
 chown ec2-user:ec2-user /home/ec2-user/app

@@ -1,7 +1,7 @@
 # Implementation Plan — Teleoperation System
 
-Stand: 2026-06-04
-Status: Phase 1/2/3/4/5/6/7 abgeschlossen ✅ — Phase 8 laufend · 49 Tasks · 19 ADRs
+Stand: 2026-06-05
+Status: Phase 1/2/3/4/5/6/7/8 abgeschlossen ✅ — Phase 9 laufend · 58 Tasks · 20 ADRs
 
 ---
 
@@ -354,7 +354,7 @@ BE-11 ─────────────────────┘
 
 ---
 
-### Phase 8 — EC2 Deployment via Docker Hub (ADR-019) 🔲 *(Sprint 8, laufend)*
+### Phase 8 — EC2 Deployment via Docker Hub (ADR-019) ✅ *(Sprint 8, abgeschlossen 2026-06-05)*
 
 **Ziel:** System auf AWS EC2 deploybar — kein Quellcode auf der Instanz, Images aus Docker Hub, Secrets aus AWS SSM Parameter Store.
 
@@ -370,10 +370,29 @@ BE-11 ─────────────────────┘
 
 ---
 
+### Phase 9 — WebRTC Videostream: Larix WHIP → MediaMTX → Browser (ADR-020) 🔲 *(Sprint 9, laufend)*
+
+**Ziel:** Ende-zu-Ende-Video: Larix Broadcaster (5G, WHIP) → MediaMTX → Operator Browser (WHEP).
+Control Server als einzige Auth- und SAFE_MODE-Kontrollinstanz über MediaMTX.
+
+| ID | Task | Typ | Abhängigkeiten |
+|----|------|-----|----------------|
+| STREAM-01 | ADR-020 — MediaMTX als WHIP/WHEP Router (Entscheidung + Begründung) | L | — |
+| STREAM-02 | `infrastructure/mediamtx/mediamtx.yml` + Docker Service (dev + prod) | M | STREAM-01 |
+| STREAM-03 | nginx: `/whep/` Proxy → MediaMTX WHEP-Endpunkt | S | STREAM-02 |
+| STREAM-04 | `useWebRTC.ts` → WHEP-Protokoll + vehicleId-Prop; `VideoPanel.tsx` + `App.tsx` | M | STREAM-02 |
+| STREAM-05 | Control Server: `POST /internal/media/auth` (WHIP+WHEP); SAFE_MODE → MediaMTX API | M | STREAM-02 |
+| STREAM-06 | TURN-Credentials in MediaMTX ICE-Config + Compose env (bestehende SSM-Params) | S | STREAM-02 |
+| STREAM-07 | CDK Port 8889 + SSM `/avoc/prod/whip-stream-key` + setup-ssm.sh | S | — |
+| STREAM-08 | `docker-compose.prod.yml`: mediamtx; control-server WHIP_STREAM_KEY + MEDIAMTX_API_URL | S | STREAM-02 |
+| STREAM-09 | Larix Setup Guide (`docs/deployment/larix-setup.md`) + E2E Smoke Test Protokoll | S | STREAM-07, STREAM-08 |
+
+---
+
 ## 9. Vollständige Task-Übersicht
 
 ```
-49 Tasks gesamt / 8 Epics — Phase 1–7 abgeschlossen ✅, Phase 8 laufend 🔲
+58 Tasks gesamt / 9 Epics — Phase 1–8 abgeschlossen ✅, Phase 9 laufend 🔲
 
 Phase 1 ✅ (Sprint 1): INFRA-01, FE-01, BE-01, BE-02, BE-03, BE-11, DC-01, DC-02, DC-03
 Phase 2 ✅:            BE-06, BE-09, BE-10, BE-12, TEST-01, TEST-02
@@ -382,7 +401,8 @@ Phase 4 ✅:            BE-04, BE-05, BE-07, BE-08
 Phase 5 ✅:            FE-05, FE-06, FE-07
 Phase 6 ✅:            TEST-03, TEST-04, TEST-05, DC-04
 Phase 7 ✅:            LOG-01..11
-Phase 8 🔲 (Sprint 8): DEPLOY-01✅, DEPLOY-02..07
+Phase 8 ✅ (Sprint 8): DEPLOY-01..07
+Phase 9 🔲 (Sprint 9): STREAM-01..09
 ```
 
 ---
