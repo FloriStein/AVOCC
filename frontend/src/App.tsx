@@ -95,7 +95,7 @@ export default function App() {
       {/* Main Grid */}
       <main className="flex-1 grid grid-cols-3 grid-rows-2 gap-4 p-4 min-h-0">
         {/* Video Panel — 2 columns, 2 rows */}
-        <VideoPanel sessionId={session.sessionId} enabled={isConnected} />
+        <VideoPanel sessionId={session.sessionId} vehicleId={session.vehicleId} enabled={isConnected} />
 
         {/* Safety Panel */}
         <SafetyPanel

@@ -3,7 +3,7 @@ import { login, startSession } from '@/lib/api-client'
 import { WSClient } from '@/lib/ws-client'
 
 const OPERATOR_ID = 'operator-1'
-const VEHICLE_ID = 'vehicle-1'
+const VEHICLE_ID = 'vehicle-001'
 
 // Exponential backoff delays in ms (1s, 2s, 4s, 8s, max 30s).
 const BACKOFF = [1000, 2000, 4000, 8000, 16000, 30000]
@@ -11,6 +11,7 @@ const BACKOFF = [1000, 2000, 4000, 8000, 16000, 30000]
 export interface SessionState {
   token: string | null
   sessionId: string | null
+  vehicleId: string
   latency: number
   wsClient: WSClient
   connect: () => Promise<void>
@@ -77,5 +78,5 @@ export function useSession(): SessionState {
     sessionStartedRef.current = false
   }, [wsClient])
 
-  return { token, sessionId, latency, wsClient, connect, resume, disconnect, startSessionIfNeeded }
+  return { token, sessionId, vehicleId: VEHICLE_ID, latency, wsClient, connect, resume, disconnect, startSessionIfNeeded }
 }

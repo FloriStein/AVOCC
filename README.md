@@ -30,7 +30,8 @@ docker compose -f infrastructure/compose/docker-compose.yml --env-file .env up -
 | http://localhost:8081 | Auth Service |
 | http://localhost:8082 | Safety Service |
 | http://localhost:8083 | Telemetry Service |
-| http://localhost:8084 | WebRTC SFU |
+| http://localhost:8084 | WebRTC SFU (passiv, Session-Events) |
+| http://localhost:8889 | MediaMTX WHIP/WHEP (Larix → Browser) |
 | http://localhost:3001 | Grafana (Log-Dashboard) |
 | http://localhost:3100 | Loki (Log-Aggregation API) |
 
@@ -42,17 +43,20 @@ Zwei orthogonale Hubs, vier Kommunikationskanäle:
 
 ```
 CONTROL HUB (Rang 1 — Safety Truth)     VIDEO HUB (Rang 2 — Awareness only)
-Control Server (Go)                      WebRTC SFU (Pion/Go)
-  · 4-Layer State Machine                  · Media Relay
-  · Safety Decision Engine                 · Server-seitiges Recording
-  · Session Manager (GSA)                  · Multi-Operator Forwarding
-  · Failure Detection
+Control Server (Go)                      MediaMTX (WHIP/WHEP Router — ADR-020)
+  · 4-Layer State Machine                  · WHIP Ingestion (Larix Broadcaster)
+  · Safety Decision Engine                 · WHEP Distribution (Operator Browser)
+  · Session Manager (GSA)                  · Auth-Hook → Control Server
+  · Failure Detection                      · SAFE_MODE-Kick via Management API
   · Operator Handover
+  · MediaMTX Auth + SAFE_MODE-Kontrolle
+
+WebRTC SFU (Pion/Go) — passiv: nur Session-Event-Subscriber, kein Media-Routing
 ```
 
 **4-Layer State Machine:** SYSTEM STATE (Master) · CONTROL STATE · MEDIA STATE · OPERATOR STATE
 
-**Kanäle:** WebSocket (Control) · MQTT (Telemetry) · Safety Event Bus (Go In-Memory) · WebRTC SFU (Video)
+**Kanäle:** WebSocket (Control) · MQTT (Telemetry) · Safety Event Bus (Go In-Memory) · WHIP/WHEP via MediaMTX (Video)
 
 → Details: [docs/architecture.md](docs/architecture.md)
 
@@ -170,10 +174,12 @@ docker compose -f tests/docker-compose.test.yml down
 ├── gen/                    # Generated Code — gitignored
 ├── frontend/               # React 18 + TypeScript + Vite + Tailwind
 ├── infrastructure/
-│   ├── compose/            # docker-compose.yml
+│   ├── compose/            # docker-compose.yml + docker-compose.prod.yml
 │   ├── docker/             # Dockerfiles, nginx.conf
 │   ├── coturn/             # STUN/TURN Konfiguration
-│   └── mosquitto/          # MQTT Broker Konfiguration
+│   ├── mediamtx/           # MediaMTX WHIP/WHEP Config (ADR-020)
+│   ├── mosquitto/          # MQTT Broker Konfiguration
+│   └── AWS/                # CDK Stack (EC2, Security Groups)
 └── tests/unit/             # Safety Test Suite (19 Szenarien, Sprint 2)
 ```
 
@@ -181,7 +187,7 @@ docker compose -f tests/docker-compose.test.yml down
 
 ## Implementierungsstand
 
-**Phasen 1–7 abgeschlossen — 42/42 Tasks ✅**
+**Phasen 1–9 abgeschlossen — 67/67 Tasks ✅**
 
 | Feature | Implementiert |
 |---------|--------------|
@@ -200,6 +206,10 @@ docker compose -f tests/docker-compose.test.yml down
 
 **Sprint 7 (Logging & Audit Trail) ✅:** pkg/logger (slog, JSON) · pkg/audit (SQLiteAuditWriter, WAL+fsync) · Loki + Grafana + Promtail · Frontend logger.ts · POST /log · GET /audit/events · AuditWriter.WriteSync() vor jeder SAFE_MODE-Transition
 
+**Sprint 8 (EC2 Deployment) ✅:** Docker Hub multi-arch Images · docker-compose.prod.yml · deploy.sh + setup-ssm.sh (AWS SSM) · coturn EC2-Config · Grafana-Login abgesichert · EC2 Bootstrap Guide
+
+**Sprint 9 (WebRTC Videostream) ✅:** MediaMTX WHIP/WHEP-Router · Larix Broadcaster → MediaMTX → Browser · Control Server Auth-Hook (externalAuthenticationURL) · SAFE_MODE → MediaMTX API (KickVehicle) · Larix Setup Guide · vehicleId vehicle-001
+
 ---
 
 ## Sprint-Stand
@@ -213,16 +223,18 @@ docker compose -f tests/docker-compose.test.yml down
 | Sprint 5 | Feature Completion Frontend — Control Panel, Video Panel, Dashboard, Telemetrie | ✅ |
 | Sprint 6 | Testing & Quality Gates — Vitest 31 Tests, Integration Tests, k6 Latenz-CI, README | ✅ |
 | Sprint 7 | Logging & Audit Trail — slog, SQLite AuditWriter, Loki + Grafana, Frontend logger.ts | ✅ |
+| Sprint 8 | EC2 Deployment — Docker Hub, deploy.sh, SSM Parameter Store, CDK Stack | ✅ |
+| Sprint 9 | WebRTC Videostream — MediaMTX WHIP/WHEP, Larix Broadcaster, Auth-Hook | ✅ |
 
-→ Abgeschlossen: alle 7 Sprints | Backlog: [tasks/backlog.md](tasks/backlog.md)
+→ Abgeschlossen: alle 9 Sprints | Backlog: [tasks/backlog.md](tasks/backlog.md)
 
 ---
 
-## ADR-Übersicht (18 Entscheidungen)
+## ADR-Übersicht (20 Entscheidungen)
 
 Alle Architekturentscheidungen sind dokumentiert und unveränderlich. Neue Erkenntnisse führen zu einem neuen ADR.
 
-Zuletzt hinzugefügt: [ADR-017](docs/adr/017-logging-strategy.md) (Hybrid Logging) · [ADR-018](docs/adr/018-audit-trail-strategy.md) (SQLite Audit Trail)
+Zuletzt hinzugefügt: [ADR-019](docs/adr/019-deployment-strategy.md) (EC2 Deployment via Docker Hub) · [ADR-020](docs/adr/020-mediamtx-whip-whep.md) (MediaMTX WHIP/WHEP Router)
 
 → [docs/adr/README.md](docs/adr/README.md) | Live-Übersicht: [DECISIONS.MD](DECISIONS.MD)
 

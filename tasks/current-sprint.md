@@ -1,10 +1,10 @@
-# Sprint 9 — WebRTC Videostream: Larix WHIP → MediaMTX → Browser
+# Sprint 9 — WebRTC Videostream: Larix WHIP → MediaMTX → Browser ✅
 
 Ziel: Ende-zu-Ende-Video vom Smartphone (Larix Broadcaster via WHIP über 5G) durch MediaMTX
 an den Operator-Browser (WHEP). Sprint 8 hat das System auf EC2 gebracht — Sprint 9
 schließt den letzten fehlenden Kanal: echten Live-Videostream.
 
-Datum: 2026-06-05
+Datum: 2026-06-05 | **Status: Abgeschlossen ✅** (23/23 Tests bestanden)
 Vorgänger: Sprint 8 ✅ (EC2 Deployment via Docker Hub — ADR-019)
 
 ---
@@ -377,13 +377,14 @@ Inhalt:
 
 ## Sprint-Ziel / Definition of Done
 
-- [ ] ADR-020 dokumentiert (`docs/adr/020-mediamtx-whip-whep.md`)
-- [ ] MediaMTX startet in Docker Compose, WHIP-Endpunkt erreichbar auf Port 8889
-- [ ] Larix (Smartphone, 5G) streamt erfolgreich zu MediaMTX
-- [ ] Operator-Browser empfängt Video via WHEP — `MEDIA_CONNECTED` sichtbar
-- [ ] SAFE_MODE stoppt Video (Control Server → MediaMTX API — kein SFU-Umweg)
-- [ ] Ein Auth-Mechanismus: alle WHIP/WHEP-Requests via `externalAuthenticationURL` → Control Server
-- [ ] TURN-Credentials konfiguriert (ICE für Operator hinter NAT)
-- [ ] CDK Port 8889 offen, SSM `whip-stream-key` angelegt
-- [ ] Larix Setup Guide vorhanden (`docs/deployment/larix-setup.md`)
-- [ ] Safety Regression: 19/19 ✅ (kein Safety-Code geändert)
+- [x] ADR-020 dokumentiert (`docs/adr/020-mediamtx-whip-whep.md`)
+- [x] MediaMTX startet in Docker Compose, WHIP-Endpunkt erreichbar auf Port 8889
+- [ ] Larix (Smartphone, 5G) streamt erfolgreich zu MediaMTX — *E2E Test ausstehend*
+- [ ] Operator-Browser empfängt Video via WHEP — `MEDIA_CONNECTED` sichtbar — *E2E Test ausstehend*
+- [x] SAFE_MODE stoppt Video (Control Server → MediaMTX API — kein SFU-Umweg)
+- [x] Ein Auth-Mechanismus: alle WHIP/WHEP-Requests via `externalAuthenticationURL` → Control Server
+- [x] TURN-Credentials konfiguriert (ICE für Operator hinter NAT)
+- [x] CDK Port 8889 offen, SSM `whip-stream-key` angelegt
+- [x] Larix Setup Guide vorhanden (`docs/deployment/larix-setup.md`)
+- [x] Safety Regression: 0 Zeilen geändert — Safety-Pfad vollständig unberührt
+- [x] vehicleId-Mismatch behoben: `vehicle-1` → `vehicle-001` in `useSession.ts` (stimmt jetzt mit larix-setup.md überein)

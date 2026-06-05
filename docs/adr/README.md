@@ -6,7 +6,7 @@ Vollständige Live-Übersicht: [DECISIONS.MD](../../DECISIONS.MD)
 
 ---
 
-## ADR-Index (18 ADRs)
+## ADR-Index (20 ADRs)
 
 | ADR | Titel | Kernentscheidung |
 |-----|-------|-----------------|
@@ -24,11 +24,13 @@ Vollständige Live-Übersicht: [DECISIONS.MD](../../DECISIONS.MD)
 | [ADR-012](012-message-flow-runtime.md) | Message Flow | Field-based Protobuf Versioning; CI Schema-Gate |
 | [ADR-012b](012b-message-flow-runtime-sync-codegen.md) | Sync/Async & Code-Gen | Safety/MQTT async; Auth async+lokal; Frontend sync ACK; Build-time protoc |
 | [ADR-013](013-frontend-tech-stack.md) | Frontend Stack | React 18 + TypeScript + Vite + Tailwind + Shadcn/ui + protoc-gen-es |
-| [ADR-014](014-video-streaming.md) | Video Streaming | WebRTC SFU (Pion/Go) + coturn; 1 Primary + 1-2 Secondary; Handover; Recording |
+| [ADR-014](014-video-streaming.md) | Video Streaming | WebRTC SFU (Pion/Go) + coturn; ursprüngliche Media-Routing-Entscheidung; abgelöst durch ADR-020 |
 | [ADR-015](015-session-coordinator.md) | Session Coordinator | Control Session als primäre Einheit; GSA; Ephemeral + Checkpoint; SFU Event-Push |
 | [ADR-016](016-session-correlation-id.md) | Correlation ID | ULID; Vehicle-ID → Session-ID → Event-ID; JWT = Identity only |
 | [ADR-017](017-logging-strategy.md) | Logging Strategy | Hybrid: Technical async (slog → Loki); Safety sync (AuditWriter.WriteSync); 3 Log-Klassen; Interface-first |
 | [ADR-018](018-audit-trail-strategy.md) | Audit Trail Strategy | SQLite WAL als AuditWriter; fsync vor SAFE_MODE; garantierte Safety-Event-Persistenz; kein extra Service |
+| [ADR-019](019-deployment-strategy.md) | Deployment-Strategie | Docker Hub + AWS EC2 + SSM Parameter Store; kein Quellcode auf Instanz; CDK Infrastructure Stack |
+| [ADR-020](020-mediamtx-whip-whep.md) | MediaMTX WHIP/WHEP | MediaMTX als WHIP/WHEP Router; Control Server als einzige Auth- und SAFE_MODE-Instanz; Pion SFU passiv |
 
 ---
 
@@ -36,10 +38,12 @@ Vollständige Live-Übersicht: [DECISIONS.MD](../../DECISIONS.MD)
 
 | Thema | Blockiert | Referenz |
 |-------|-----------|----------|
-| Prioritätsmodell technisch (Channels vs. Header-Flag) | nach Sprint 7 | ADR-008 Folge |
-| Session Recording Storage (DB/Files/Object Storage) | nach Sprint 7 | ADR-005 Folge — MemoryRecorder aktiv seit Sprint 4 |
+| Prioritätsmodell technisch (Channels vs. Header-Flag) | offen | ADR-008 Folge |
+| Session Recording Storage (DB/Files/Object Storage) | nach Sprint 9 | ADR-005 Folge — MemoryRecorder aktiv seit Sprint 4 |
 | DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
-| Backup-Strategie Audit Store | nach LOG-10 | ADR-019 möglich — SQLite-Volume-Sicherung für Produktivbetrieb |
+| Backup-Strategie Audit Store (SQLite → S3) | nach Sprint 9 | ADR-018 Folge — S3-Bucket im CDK vorhanden |
+| HTTPS / TLS-Terminierung auf EC2 | nach Sprint 9 | ADR-019 Folge — für Testphase HTTP akzeptabel |
+| Multi-Vehicle vehicleId-Routing in MediaMTX | Sprint 10 | ADR-020 Folge — Sprint 9 nutzt fixed path `vehicle-001` |
 
 ---
 

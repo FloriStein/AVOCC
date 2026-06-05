@@ -72,6 +72,12 @@ if [ ${#grafana_password} -lt 12 ]; then
   echo "ERROR: GRAFANA_ADMIN_PASSWORD muss mindestens 12 Zeichen lang sein." && exit 1
 fi
 
+# MediaMTX WHIP Stream Key (ADR-020)
+read -rsp "WHIP_STREAM_KEY (min. 32 Zeichen — Bearer Token für Larix): " whip_stream_key; echo ""
+if [ ${#whip_stream_key} -lt 32 ]; then
+  echo "ERROR: WHIP_STREAM_KEY muss mindestens 32 Zeichen lang sein." && exit 1
+fi
+
 # Docker Hub
 read -rp "DOCKER_USERNAME (Docker Hub Benutzername): " docker_username
 if [ -z "$docker_username" ]; then
@@ -88,6 +94,7 @@ echo "Schreibe Parameter nach /avoc/prod/ ..."
 echo ""
 
 put_secure  /avoc/prod/jwt-secret              "$jwt_secret"
+put_secure  /avoc/prod/whip-stream-key        "$whip_stream_key"
 put_string  /avoc/prod/turn-external-ip        "$turn_external_ip"
 put_string  /avoc/prod/turn-realm              "$turn_realm"
 put_string  /avoc/prod/turn-user               "$turn_user"

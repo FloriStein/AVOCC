@@ -62,6 +62,11 @@ export class StreamingStack extends cdk.Stack {
     // ACHTUNG: In Produktion auf eigene IP einschränken: ec2.Peer.ipv4("DEINE_IP/32")
     sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(3001), "Grafana");
 
+    // NEU: MediaMTX WHIP/WHEP — Larix Broadcaster + Browser (ADR-020)
+    // WHIP: Larix sendet direkt auf Port 8889 (kein nginx-Proxy für Ingress)
+    // WHEP: Browser-Anfragen via nginx auf Port 3000, intern an MediaMTX:8889
+    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(8889), "MediaMTX WHIP/WHEP");
+
     // ENTFERNT:
     // - 8554/tcp (RTSP) — nicht Teil der AVOC-Architektur
     // - 8189/udp (WebRTC alt) — SFU läuft auf 8084 intern, Media über 10000-10050/udp

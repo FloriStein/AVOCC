@@ -33,6 +33,8 @@ services:
       AUTH_SERVICE_URL: "http://auth-service:8081"
       AUDIT_DB_PATH: "/data/audit/avoc_audit.db"
       LOG_LEVEL: "info"
+      WHIP_STREAM_KEY: ${WHIP_STREAM_KEY}
+      MEDIAMTX_API_URL: "http://mediamtx:9997"
     volumes:
       - audit-data:/data/audit
     depends_on:
@@ -99,6 +101,24 @@ services:
     environment:
       SFU_PORT: "8084"
       CONTROL_SERVER_URL: "http://control-server:8080"
+    networks:
+      - avoc-net
+    restart: unless-stopped
+
+  # ─── MediaMTX — WHIP/WHEP Router (ADR-020) ───────────────────────────────
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    ports:
+      - "8889:8889"   # WHIP/WHEP (Larix + Browser via nginx)
+      - "9997:9997"   # Management API (intern, für Control Server SAFE_MODE-Kick)
+    volumes:
+      - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
+    environment:
+      TURN_USER: ${TURN_USER}
+      TURN_PASSWORD: ${TURN_PASSWORD}
+    depends_on:
+      - control-server
+      - stun-turn
     networks:
       - avoc-net
     restart: unless-stopped

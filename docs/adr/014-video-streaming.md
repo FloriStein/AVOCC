@@ -1,6 +1,10 @@
 # ADR-014: Video Streaming Technologie — WebRTC SFU
 
-Status: Accepted
+Status: Superseded by ADR-020
+
+> **Hinweis (Sprint 9, 2026-06-05):** Das Media-Routing wurde in [ADR-020](020-mediamtx-whip-whep.md) neu entschieden.
+> MediaMTX übernimmt WHIP/WHEP-Routing (Larix Broadcaster → Browser). Der Pion SFU (diese ADR)
+> ist weiterhin aktiv, aber als passiver Session-Event-Subscriber ohne Media-Routing-Verantwortung.
 
 ## Kontext
 

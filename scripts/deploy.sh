@@ -43,6 +43,7 @@ get_secure() {
 echo "[1/4] Lade Secrets aus SSM Parameter Store..."
 
 export JWT_SECRET=$(get_secure          /avoc/prod/jwt-secret)
+export WHIP_STREAM_KEY=$(get_secure     /avoc/prod/whip-stream-key)
 export TURN_EXTERNAL_IP=$(get           /avoc/prod/turn-external-ip)
 export TURN_REALM=$(get                 /avoc/prod/turn-realm)
 export TURN_USER=$(get                  /avoc/prod/turn-user)
@@ -56,6 +57,7 @@ export REGISTRY="docker.io/${DOCKER_USERNAME}"
 export VERSION
 
 echo "  JWT_SECRET          loaded"
+echo "  WHIP_STREAM_KEY     loaded"
 echo "  TURN_EXTERNAL_IP    ${TURN_EXTERNAL_IP}"
 echo "  TURN_REALM          ${TURN_REALM}"
 echo "  REGISTRY            ${REGISTRY}"

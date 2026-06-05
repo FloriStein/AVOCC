@@ -1,6 +1,6 @@
 # Teleoperation System Architecture
 
-Stand: 2026-06-03 (aktualisiert nach ADR-001 bis ADR-018)
+Stand: 2026-06-05 (aktualisiert nach ADR-001 bis ADR-020)
 
 ---
 
@@ -12,12 +12,16 @@ Das Teleoperation System besteht aus **zwei orthogonalen Hubs** und **vier Kommu
 
 ```
 CONTROL HUB (Rang 1 — Safety Truth)       VIDEO HUB (Rang 2 — Awareness only)
-Control Server (Go)                        WebRTC SFU (Pion/Go)
-  · State Machine (4 Layer)                 · Media Relay
-  · Safety Decision Engine                  · Server-seitiges Recording
-  · Session Manager (GSA)                   · Multi-Operator Forwarding
-  · Failure Detection                        · Dumb Router with State Subscription
-  · Operator Handover                        · Session Events vom Control Hub
+Control Server (Go)                        MediaMTX (WHIP/WHEP Router — ADR-020)
+  · State Machine (4 Layer)                 · WHIP Ingestion (Larix Broadcaster, 5G)
+  · Safety Decision Engine                  · WHEP Distribution (Operator Browser)
+  · Session Manager (GSA)                   · Auth-Hook → Control Server (einzige Auth-Instanz)
+  · Failure Detection                        · SAFE_MODE-Kick via Management API (:9997)
+  · Operator Handover
+  · MediaMTX Auth-Hook (POST /internal/media/auth)
+  · MediaMTX SAFE_MODE-Kick (KickVehicle)
+
+WebRTC SFU (Pion/Go) — passiv: Session-Event-Subscriber, kein Media-Routing (ADR-020)
 ```
 
 **Invariante:** `CONTROL HUB > VIDEO HUB`. Video Hub darf System State nie beeinflussen außer via DEGRADED-Annotation.
@@ -25,7 +29,7 @@ Control Server (Go)                        WebRTC SFU (Pion/Go)
 ### Vier Kommunikationskanäle
 
 1. Control Channel (WebSocket, Protobuf)
-2. Video Channel (WebRTC SFU + coturn)
+2. Video Channel (WHIP/WHEP via MediaMTX + coturn für ICE)
 3. Telemetry Channel (MQTT / Mosquitto)
 4. Safety Channel (Safety Event Bus, Go In-Memory)
 
@@ -58,17 +62,23 @@ Control Server (Go)                        WebRTC SFU (Pion/Go)
 - Asynchron, fire-and-forget (ADR-012b)
 - Safety Events: `PublishSafetyEvent`, `EmergencyStop`, `GetSafetyState`
 
-### WebRTC SFU Layer (Video Channel — ADR-014)
+### WHIP/WHEP Layer (Video Channel — ADR-020)
 
-- WebRTC Media Server: Pion (Go-native, ADR-001-konsistent)
-- NAT Traversal via ICE/STUN/TURN (coturn) — Vehicle ↔ Internet ↔ OCC
-- 1 Primary Stream (immer aktiv, an alle Operatoren geforwardet)
-- 1–2 Secondary Streams (on-demand)
-- Adaptive Bitrate via RTCP Feedback
-- Server-seitiges Recording (primär, Audit-fähig)
-- Multi-Operator Forwarding: Active + Observer/Standby
-- Signaling via WebSocket-Kanal (SDP/ICE — **bewusst außerhalb Protobuf-Schema**)
-- Session Context via Event-Push vom Control Server (ADR-015)
+- **MediaMTX** als WHIP/WHEP Router (ersetzt Pion SFU als Media-Layer)
+- **WHIP** (WebRTC-HTTP Ingestion Protocol): Larix Broadcaster (Smartphone, 5G) → MediaMTX Port 8889
+- **WHEP** (WebRTC-HTTP Egress Protocol): Browser → nginx `/whep/` Proxy → MediaMTX Port 8889
+- **ICE/NAT Traversal**: STUN + TURN via coturn (TURN_USER/TURN_PASSWORD aus SSM)
+- **Auth**: Einziger Mechanismus — `externalAuthenticationURL` → `POST /internal/media/auth` (Control Server)
+  - Publish (WHIP): Bearer Token == WHIP_STREAM_KEY → 200 / 401
+  - Read (WHEP): JWT + aktive Operator-Session → 200 / 401
+- **SAFE_MODE**: Control Server ruft `GET /v3/webrtcsessions/list` → `POST kick/{id}` auf MediaMTX Management API (:9997)
+- **vehicleId-Routing**: Pfad-Regex `~^vehicle-.*`; aktuell `vehicle-001` (hardcoded, Sprint 9)
+- **ICE non-trickle**: Browser wartet vollständige ICE-Gathering (`icegatheringstatechange → complete`) vor WHEP-Request
+
+**WebRTC SFU (Pion/Go) — passiver Session-Event-Subscriber (ADR-020):**
+- Empfängt SESSION_* Events vom Control Server (ADR-015) — wie bisher
+- Kein ausgehender Call zu MediaMTX oder anderen Services
+- Kein Media-Routing mehr (von ADR-014 übernommen durch ADR-020)
 
 ---
 
@@ -91,16 +101,18 @@ Der **Control Server** ist einziger Session-Erzeuger, -Verwalter und -Zerstörer
 - Recovery Checkpoint bei SAFE_MODE speichern
 - Session Events asynchron an SFU pushen
 
-### SFU Session Events
+### SFU Session Events (passiv empfangen, ADR-020)
 
 ```
-SESSION_CREATED       → SFU bereitet Routing vor
-OPERATOR_ASSIGNED     → SFU routet Primary Stream
-OPERATOR_HANDOVER     → SFU aktualisiert Routing sofort
-SESSION_DEGRADED      → SFU zeigt Degraded-Status
-SESSION_SAFE_MODE     → SFU droppt Streams sofort
-SESSION_ENDED         → SFU beendet alle Streams
+SESSION_CREATED       → SFU protokolliert (kein Routing-Effekt)
+OPERATOR_ASSIGNED     → SFU protokolliert
+OPERATOR_HANDOVER     → SFU protokolliert
+SESSION_DEGRADED      → SFU protokolliert
+SESSION_SAFE_MODE     → Control Server kickt MediaMTX-Sessions direkt (kein SFU-Umweg)
+SESSION_ENDED         → SFU protokolliert
 ```
+
+MediaMTX übernimmt alle Media-Routing-Verantwortlichkeiten. Der SFU hat keine ausgehenden Calls.
 
 ### Session Correlation ID (ADR-016)
 
@@ -209,7 +221,7 @@ Ein Service, 5 logische Module:
 
 | Komponente | Implementierung | Sprint |
 |------------|----------------|--------|
-| **Video Panel** | `VideoPanel.tsx` + `useWebRTC.ts` — RTCPeerConnection, SDP Signaling via `/sfu/subscribe/`, MEDIA STATE Badge, DEGRADED-Overlay | Sprint 5 ✅ |
+| **Video Panel** | `VideoPanel.tsx` + `useWebRTC.ts` — RTCPeerConnection, WHEP-Protokoll via `/whep/{vehicleId}/whep`, ICE non-trickle Gathering, MEDIA STATE Badge, DEGRADED-Overlay | Sprint 5/9 ✅ |
 | **Control Panel** | `ControlPanel.tsx` + `useControls.ts` — Keyboard WASD/Pfeiltasten, Virtual Joystick SVG, Gamepad API, Speed Slider, 20 Hz Protobuf Command Loop | Sprint 5 ✅ |
 | **Safety Panel** | `SafetyPanel.tsx` + `useDeadmanSwitch.ts` — Emergency Stop, Dead-man Switch (Spacebar/Button), SAFE MODE Indikator | Sprint 3 ✅ |
 | **Connection Status Panel** | `ConnectionPanel.tsx` — SYSTEM STATE, Latenzanzeige, Session-ID (ULID), Operator-Rolle, Speed/Battery (Telemetrie) | Sprint 3/5 ✅ |
@@ -244,10 +256,11 @@ AutonomousVehicleOperationalControlCenter/
 │   │   ├── statemachine/         # 4-Layer State Machine (ADR-011)
 │   │   ├── safety/               # Safety Decision Module (ADR-009)
 │   │   └── session/              # Session Manager / GSA (ADR-015/016)
+│   ├── mediamtx/                 # MediaMTX Management API Client — KickVehicle (ADR-020)
 │   ├── recording/                # Session Recording Interface + MemoryRecorder (BE-07)
 │   ├── telemetryservice/         # MQTT Telemetry Client — Paho (BE-05)
 │   ├── vehicleconnection/        # Vehicle WebSocket Handler (BE-06)
-│   └── webrtcsfu/                # WebRTC SFU Pion/Go — Media Relay (BE-08)
+│   └── webrtcsfu/                # WebRTC SFU Pion/Go — passiver Session-Event-Subscriber (ADR-020)
 ├── pkg/                          # Shared Go-Pakete
 │   ├── ulid/                     # ULID-Wrapper (ADR-016)
 │   ├── logger/                   # Strukturierter slog-Wrapper — JSON, Event-Type-Katalog (ADR-017)
@@ -258,8 +271,12 @@ AutonomousVehicleOperationalControlCenter/
 │       ├── hooks/                # useControls, useWebRTC, useTelemetry, useSession, useSystemState, useDeadmanSwitch
 │       └── lib/                  # ws-client (Protobuf ACK), api-client
 ├── infrastructure/               # Docker & Compose
-│   ├── docker/                   # Dockerfiles je Service
-│   └── compose/                  # docker-compose.yml
+│   ├── docker/                   # Dockerfiles je Service, nginx.conf
+│   ├── compose/                  # docker-compose.yml + docker-compose.prod.yml
+│   ├── mediamtx/                 # mediamtx.yml — WHIP/WHEP Router Config (ADR-020)
+│   ├── coturn/                   # STUN/TURN Config
+│   ├── mosquitto/                # MQTT Broker Config
+│   └── AWS/                      # CDK Stack (EC2, Security Groups, ADR-019)
 ├── tests/                        # Test-Suites
 │   ├── unit/
 │   ├── integration/
@@ -296,15 +313,17 @@ Alle Komponenten laufen containerisiert. Keine Kubernetes-Abhängigkeit.
 
 | Service | Technologie | Zweck |
 |---------|-------------|-------|
-| `frontend` | React/Vite, nginx | SPA serving |
-| `control-server` | Go | WebSocket, State Machine, Session Manager (GSA) |
+| `frontend` | React/Vite, nginx | SPA serving; nginx routet `/whep/` → MediaMTX |
+| `control-server` | Go | WebSocket, State Machine, GSA, MediaMTX Auth-Hook + SAFE_MODE-Kick |
 | `auth-service` | Go | JWT Ausstellung, Operator-Rollen, Handover-Token |
 | `safety-service` | Go | Safety Event Bus (In-Memory, DDS-ready) |
 | `telemetry-service` | Go | MQTT Bridge / Mosquitto Client |
 | `mosquitto` | Eclipse Mosquitto | MQTT Broker |
-| `webrtc-sfu` | Go / Pion | WebRTC Media Server, Recording, Multi-Operator |
-| `stun-turn` | coturn | STUN/TURN für NAT Traversal (Vehicle ↔ Internet ↔ OCC) |
+| `webrtc-sfu` | Go / Pion | Passiver Session-Event-Subscriber (ADR-020); kein Media-Routing |
+| `mediamtx` | bluenviron/mediamtx | WHIP/WHEP Router; Management API :9997 (ADR-020) |
+| `stun-turn` | coturn | STUN/TURN für NAT Traversal; ICE-Credentials für MediaMTX + Browser |
 | `loki` | Grafana Loki | Log-Aggregation (Phase 7) |
+| `promtail` | Grafana Promtail | Log-Collector (Docker-Label-Discovery → Loki) |
 | `grafana` | Grafana | Log-Visualisierung, Session-Dashboards (Phase 7) |
 
 ### Design Principles
@@ -369,7 +388,7 @@ Keine direkte Loki-Verbindung aus dem Browser — Authentifizierung und Session-
 {
   "time": "2026-06-03T19:00:00Z", "level": "INFO", "service": "control-server",
   "session_id": "01JTXY...", "event_id": "01JTXY...",
-  "vehicle_id": "vehicle-1", "operator_id": "operator-1",
+  "vehicle_id": "vehicle-001", "operator_id": "operator-1",
   "event_type": "SAFE_MODE_ENTERED", "msg": "Dead-man timeout"
 }
 ```

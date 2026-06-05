@@ -3,7 +3,7 @@
 Lifecycle: backlog → sprint → done
 Typen: S (<30 Min), M (30–180 Min), L (Architektur, ADR-pflichtig)
 
-Stand: 2026-06-05 — aktualisiert nach Sprint 8 (EC2 Deployment) + Sprint 9 (Video Stream, laufend)
+Stand: 2026-06-05 — aktualisiert nach Sprint 9 (Video Stream, abgeschlossen)
 
 ---
 
@@ -108,19 +108,19 @@ LOG-10 → LOG-11 (nach LOG-02)
 
 ---
 
-## EPIC: Video Stream (Sprint 9, laufend)
+## EPIC: Video Stream (Sprint 9) ✅
 
 | ID | Task | Typ | Status | Abhängigkeiten |
 |----|------|-----|--------|----------------|
-| STREAM-01 | ADR-020 — MediaMTX als WHIP/WHEP Router | L | 🔲 Sprint 9 | — |
-| STREAM-02 | `infrastructure/mediamtx/mediamtx.yml` + Docker Service | M | 🔲 Sprint 9 | STREAM-01 |
-| STREAM-03 | nginx: `/whep/` Proxy | S | 🔲 Sprint 9 | STREAM-02 |
-| STREAM-04 | `useWebRTC.ts` → WHEP-Protokoll + vehicleId-Prop | M | 🔲 Sprint 9 | STREAM-02 |
-| STREAM-05 | Control Server: `/internal/media/auth` + SAFE_MODE → MediaMTX API | M | 🔲 Sprint 9 | STREAM-02 |
-| STREAM-06 | TURN in MediaMTX ICE-Config + Compose env | S | 🔲 Sprint 9 | STREAM-02 |
-| STREAM-07 | CDK Port 8889 + SSM `whip-stream-key` + setup-ssm.sh | S | 🔲 Sprint 9 | — |
-| STREAM-08 | `docker-compose.prod.yml`: mediamtx + deploy.sh Update | S | 🔲 Sprint 9 | STREAM-02 |
-| STREAM-09 | Larix Setup Guide + E2E Smoke Test | S | 🔲 Sprint 9 | STREAM-07, STREAM-08 |
+| STREAM-01 | ADR-020 — MediaMTX als WHIP/WHEP Router | L | ✅ Sprint 9 | — |
+| STREAM-02 | `infrastructure/mediamtx/mediamtx.yml` + Docker Service | M | ✅ Sprint 9 | STREAM-01 |
+| STREAM-03 | nginx: `/whep/` Proxy | S | ✅ Sprint 9 | STREAM-02 |
+| STREAM-04 | `useWebRTC.ts` → WHEP-Protokoll + vehicleId-Prop | M | ✅ Sprint 9 | STREAM-02 |
+| STREAM-05 | Control Server: `/internal/media/auth` + SAFE_MODE → MediaMTX API | M | ✅ Sprint 9 | STREAM-02 |
+| STREAM-06 | TURN in MediaMTX ICE-Config + Compose env | S | ✅ Sprint 9 | STREAM-02 |
+| STREAM-07 | CDK Port 8889 + SSM `whip-stream-key` + setup-ssm.sh | S | ✅ Sprint 9 | — |
+| STREAM-08 | `docker-compose.prod.yml`: mediamtx + deploy.sh Update | S | ✅ Sprint 9 | STREAM-02 |
+| STREAM-09 | Larix Setup Guide + E2E Smoke Test | S | ✅ Sprint 9 | STREAM-07, STREAM-08 |
 
 ---
 
@@ -151,6 +151,6 @@ Phase 7 — Logging & Audit Trail ✅ (abgeschlossen 2026-06-04)
 Phase 8 — EC2 Deployment via Docker Hub ✅ (abgeschlossen 2026-06-05)
   DEPLOY-01..07 ✅
 
-Phase 9 — Video Stream: Larix WHIP → MediaMTX → Browser (Sprint 9, laufend)
-  STREAM-01..09 🔲
+Phase 9 — Video Stream: Larix WHIP → MediaMTX → Browser ✅ (abgeschlossen 2026-06-05)
+  STREAM-01..09 ✅
 ```

@@ -11,6 +11,7 @@ import (
 	"avoc/internal/controlserver/session"
 	"avoc/internal/controlserver/statemachine"
 	"avoc/internal/controlserver/transport"
+	"avoc/internal/mediamtx"
 	"avoc/internal/recording"
 	"avoc/internal/vehicleconnection"
 	"avoc/pkg/audit"
@@ -33,6 +34,9 @@ func main() {
 	safetyURL := envOr("SAFETY_SERVICE_URL", "http://safety-service:8082")
 	sfuURL := envOr("SFU_SERVICE_URL", "http://webrtc-sfu:8084")
 	authURL := envOr("AUTH_SERVICE_URL", "http://auth-service:8081")
+	whipStreamKey := os.Getenv("WHIP_STREAM_KEY")
+	mediamtxAPIURL := envOr("MEDIAMTX_API_URL", "http://mediamtx:9997")
+	mtxClient := mediamtx.NewClient(mediamtxAPIURL)
 
 	// --- Audit Writer (LOG-10/11 — ADR-018) ---
 	dbPath := envOr("AUDIT_DB_PATH", "/data/audit/avoc_audit.db")
@@ -184,6 +188,8 @@ func main() {
 			sessionMgr.SaveCheckpoint("SAFE_MODE", "CONTROL_BLOCKED", "EMERGENCY_STOP")
 			sessionMgr.PushSFUEvent("SESSION_SAFE_MODE")
 			recorder.RecordSafetyEvent(sess.ID, ulid.Generate(), sess.VehicleID, sess.OperatorID, "EMERGENCY_STOP", "operator emergency stop")
+			// ADR-020: Control Server kicks MediaMTX subscribers directly on SAFE_MODE
+			go mtxClient.KickVehicle(sess.VehicleID)
 		}
 		w.WriteHeader(http.StatusAccepted)
 	})
@@ -248,6 +254,49 @@ func main() {
 			"count":      len(entries),
 			"entries":    entries,
 		})
+	})
+
+	// MediaMTX Auth-Hook (ADR-020) — validiert WHIP publish + WHEP read
+	// MediaMTX ruft diesen Endpoint für jeden eingehenden WHIP/WHEP-Request auf.
+	mux.HandleFunc("POST /internal/media/auth", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Action   string `json:"action"`   // "publish" or "read"
+			Path     string `json:"path"`
+			Password string `json:"password"` // Bearer-Token-Wert
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+
+		switch req.Action {
+		case "publish":
+			// WHIP: Fahrzeug-Client (Larix) authentifiziert sich mit Stream Key
+			if whipStreamKey == "" || req.Password != whipStreamKey {
+				log.Warn("media auth: WHIP publish rejected", "path", req.Path)
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			log.Info("media auth: WHIP publish allowed", "path", req.Path)
+		case "read":
+			// WHEP: Operator-Browser authentifiziert sich mit JWT
+			// Prüfung: Token nicht leer + aktive Session vorhanden
+			if req.Password == "" {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			_, hasSession := sessionMgr.GetCurrentSession()
+			if !hasSession {
+				log.Warn("media auth: WHEP read rejected — no active session", "path", req.Path)
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			log.Info("media auth: WHEP read allowed", "path", req.Path)
+		default:
+			http.Error(w, "unknown action", http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
 	})
 
 	// State + Health

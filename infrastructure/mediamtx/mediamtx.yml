@@ -1,0 +1,48 @@
+# MediaMTX — WHIP/WHEP Router (ADR-020)
+#
+# WHIP: Larix Broadcaster → POST /vehicle-001/whip (Bearer Stream Key)
+# WHEP: Operator Browser  → POST /vehicle-001/whep (Bearer JWT)
+#
+# Auth: externalAuthenticationURL → Control Server /internal/media/auth
+# ICE:  STUN + TURN via coturn (TURN_USER + TURN_PASSWORD als Env-Variablen)
+
+###############################################################################
+# API (Management — nur intern, nicht nach außen exponiert)
+###############################################################################
+api: yes
+apiAddress: :9997
+
+###############################################################################
+# Logging
+###############################################################################
+logLevel: info
+logDestinations: [stdout]
+
+###############################################################################
+# WebRTC / WHIP / WHEP
+###############################################################################
+webrtc: yes
+webrtcAddress: :8889
+
+# ICE-Server für Browser und Fahrzeug hinter NAT (5G-Netz).
+# TURN_USER und TURN_PASSWORD werden zur Laufzeit als Env-Variablen injiziert.
+webrtcICEServers2:
+  - url: stun:coturn:3478
+  - url: turn:coturn:3478
+    username: ${TURN_USER}
+    password: ${TURN_PASSWORD}
+
+###############################################################################
+# Auth — alle Publish/Read-Requests → Control Server
+# Ein einziger Mechanismus für WHIP (stream key) und WHEP (JWT).
+###############################################################################
+externalAuthenticationURL: http://control-server:8080/internal/media/auth
+
+###############################################################################
+# Paths — alle Fahrzeug-Pfade folgen dem Schema vehicle-*
+###############################################################################
+paths:
+  "~^vehicle-.*":
+    # Larix publisht via WHIP mit Bearer Stream Key.
+    # Browser subscribed via WHEP mit Bearer JWT.
+    # Beide Requests werden vom auth hook validiert.

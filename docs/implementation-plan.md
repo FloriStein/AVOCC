@@ -1,7 +1,7 @@
 # Implementation Plan — Teleoperation System
 
 Stand: 2026-06-05
-Status: Phase 1/2/3/4/5/6/7/8 abgeschlossen ✅ — Phase 9 laufend · 58 Tasks · 20 ADRs
+Status: Phase 1–9 abgeschlossen ✅ · 67 Tasks · 20 ADRs
 
 ---
 
@@ -370,7 +370,7 @@ BE-11 ─────────────────────┘
 
 ---
 
-### Phase 9 — WebRTC Videostream: Larix WHIP → MediaMTX → Browser (ADR-020) 🔲 *(Sprint 9, laufend)*
+### Phase 9 — WebRTC Videostream: Larix WHIP → MediaMTX → Browser (ADR-020) ✅ *(Sprint 9, abgeschlossen 2026-06-05)*
 
 **Ziel:** Ende-zu-Ende-Video: Larix Broadcaster (5G, WHIP) → MediaMTX → Operator Browser (WHEP).
 Control Server als einzige Auth- und SAFE_MODE-Kontrollinstanz über MediaMTX.
@@ -392,7 +392,7 @@ Control Server als einzige Auth- und SAFE_MODE-Kontrollinstanz über MediaMTX.
 ## 9. Vollständige Task-Übersicht
 
 ```
-58 Tasks gesamt / 9 Epics — Phase 1–8 abgeschlossen ✅, Phase 9 laufend 🔲
+67 Tasks gesamt / 9 Epics — Phase 1–9 abgeschlossen ✅
 
 Phase 1 ✅ (Sprint 1): INFRA-01, FE-01, BE-01, BE-02, BE-03, BE-11, DC-01, DC-02, DC-03
 Phase 2 ✅:            BE-06, BE-09, BE-10, BE-12, TEST-01, TEST-02
@@ -402,7 +402,7 @@ Phase 5 ✅:            FE-05, FE-06, FE-07
 Phase 6 ✅:            TEST-03, TEST-04, TEST-05, DC-04
 Phase 7 ✅:            LOG-01..11
 Phase 8 ✅ (Sprint 8): DEPLOY-01..07
-Phase 9 🔲 (Sprint 9): STREAM-01..09
+Phase 9 ✅ (Sprint 9): STREAM-01..09
 ```
 
 ---

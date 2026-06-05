@@ -2,8 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { reportMediaState } from '@/lib/api-client'
 import { FE_WEBRTC_STATE, logEvent } from '@/lib/logger'
 
-const OPERATOR_PEER_ID = 'operator-1'
-
 export type MediaState =
   | 'MEDIA_INIT'
   | 'MEDIA_NEGOTIATING'
@@ -11,14 +9,14 @@ export type MediaState =
   | 'MEDIA_DEGRADED'
   | 'MEDIA_FAILED'
 
-export function useWebRTC(sessionId: string | null, enabled: boolean) {
+export function useWebRTC(sessionId: string | null, vehicleId: string, enabled: boolean) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [mediaState, setMediaState] = useState<MediaState>('MEDIA_INIT')
   const pcRef = useRef<RTCPeerConnection | null>(null)
+  const tokenRef = useRef<string | null>(null)
 
   const updateState = useCallback((state: MediaState) => {
     setMediaState(state)
-    // Notify Control Server — MEDIA_FAILED → DEGRADED (never SAFE_MODE, ADR-009 Invariant 1)
     reportMediaState(state).catch(() => {})
     logEvent(FE_WEBRTC_STATE, 'WebRTC media state changed',
       { sessionId: sessionId ?? '', data: { state } })
@@ -34,7 +32,7 @@ export function useWebRTC(sessionId: string | null, enabled: boolean) {
   }, [])
 
   const connect = useCallback(async () => {
-    if (!sessionId) return
+    if (!sessionId || !vehicleId) return
     disconnect()
     updateState('MEDIA_NEGOTIATING')
 
@@ -43,7 +41,6 @@ export function useWebRTC(sessionId: string | null, enabled: boolean) {
     })
     pcRef.current = pc
 
-    // Browser receives video from SFU (recvonly — vehicle sends, SFU forwards)
     pc.addTransceiver('video', { direction: 'recvonly' })
 
     pc.ontrack = (event) => {
@@ -63,22 +60,36 @@ export function useWebRTC(sessionId: string | null, enabled: boolean) {
       const offer = await pc.createOffer()
       await pc.setLocalDescription(offer)
 
-      const res = await fetch(`/sfu/subscribe/${sessionId}/${OPERATOR_PEER_ID}`, {
+      // WHEP: ICE-Gathering vollständig abwarten (non-trickle)
+      await new Promise<void>(resolve => {
+        if (pc.iceGatheringState === 'complete') { resolve(); return }
+        pc.addEventListener('icegatheringstatechange', function handler() {
+          if (pc.iceGatheringState === 'complete') {
+            pc.removeEventListener('icegatheringstatechange', handler)
+            resolve()
+          }
+        })
+      })
+
+      // WHEP: raw SDP als Body, Content-Type application/sdp (ADR-020)
+      const res = await fetch(`/whep/${vehicleId}/whep`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sdp: offer.sdp }),
+        headers: {
+          'Content-Type': 'application/sdp',
+          ...(tokenRef.current ? { 'Authorization': `Bearer ${tokenRef.current}` } : {}),
+        },
+        body: pc.localDescription!.sdp,
       })
 
       if (!res.ok) { updateState('MEDIA_FAILED'); return }
 
-      const { sdp } = await res.json() as { sdp: string }
-      await pc.setRemoteDescription({ type: 'answer', sdp })
+      const answerSdp = await res.text()
+      await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp })
     } catch {
       updateState('MEDIA_FAILED')
     }
-  }, [sessionId, disconnect, updateState])
+  }, [sessionId, vehicleId, disconnect, updateState])
 
-  // Auto-connect when session becomes active; disconnect when session ends or disabled
   useEffect(() => {
     if (enabled && sessionId) {
       connect()
@@ -86,9 +97,8 @@ export function useWebRTC(sessionId: string | null, enabled: boolean) {
       disconnect()
     }
     return disconnect
-  // connect/disconnect are stable useCallback refs — sessionId change is intentional trigger
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, sessionId])
+  }, [enabled, sessionId, vehicleId])
 
-  return { videoRef, mediaState, connect, disconnect }
+  return { videoRef, mediaState, connect, disconnect, tokenRef }
 }
