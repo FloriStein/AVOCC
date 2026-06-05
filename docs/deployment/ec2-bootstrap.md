@@ -50,6 +50,7 @@ Das Script fragt interaktiv nach allen Secrets und schreibt sie nach `/avoc/prod
 | SSM-Pfad | Inhalt |
 |---|---|
 | `/avoc/prod/jwt-secret` | JWT Signing Secret (≥32 Zeichen) |
+| `/avoc/prod/whip-stream-key` | MediaMTX WHIP Bearer Token (≥32 Zeichen, ADR-020) |
 | `/avoc/prod/turn-external-ip` | Elastic IP (z. B. `1.2.3.4`) |
 | `/avoc/prod/turn-realm` | TURN Realm (z. B. `avoc.example.com`) |
 | `/avoc/prod/turn-user` | TURN Benutzername |

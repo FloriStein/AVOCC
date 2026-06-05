@@ -8,6 +8,7 @@
 #   - aws cli installiert
 #   - IAM Instance Profile mit SSM-Leseberechtigung auf /avoc/*
 #   - docker-compose.prod.yml liegt in APP_DIR
+#   - mediamtx/mediamtx.yml liegt in APP_DIR (aws s3 cp ... ~/app/mediamtx/mediamtx.yml)
 #
 # Verwendung:
 #   AWS_REGION=eu-central-1 VERSION=latest bash ~/app/deploy.sh
@@ -15,11 +16,24 @@
 set -euo pipefail
 
 REGION=${AWS_REGION:-eu-central-1}
-APP_DIR=${APP_DIR:-$(eval echo ~)/app}
+APP_DIR=${APP_DIR:-$(dirname "$(realpath "$0")")}
 VERSION=${VERSION:-latest}
 
 echo "=== AVOC Deploy === Region: $REGION  Version: $VERSION"
 echo ""
+
+# ─── Voraussetzungen prüfen ───────────────────────────────────────────────────
+
+REQUIRED_FILES=(
+  "$APP_DIR/docker-compose.prod.yml"
+  "$APP_DIR/mediamtx/mediamtx.yml"
+  "$APP_DIR/mosquitto/mosquitto.conf"
+)
+for f in "${REQUIRED_FILES[@]}"; do
+  if [ ! -f "$f" ]; then
+    echo "ERROR: Pflichtdatei fehlt: $f" && exit 1
+  fi
+done
 
 # ─── SSM Parameter lesen ──────────────────────────────────────────────────────
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -259,12 +260,14 @@ func main() {
 	// MediaMTX Auth-Hook (ADR-020) — validiert WHIP publish + WHEP read
 	// MediaMTX ruft diesen Endpoint für jeden eingehenden WHIP/WHEP-Request auf.
 	mux.HandleFunc("POST /internal/media/auth", func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, _ := io.ReadAll(r.Body)
+		log.Info("media auth: raw request", "body", string(bodyBytes))
 		var req struct {
-			Action   string `json:"action"`   // "publish" or "read"
-			Path     string `json:"path"`
-			Password string `json:"password"` // Bearer-Token-Wert
+			Action string `json:"action"`
+			Path   string `json:"path"`
+			Token  string `json:"token"`  // Bearer Token (WHIP/WHEP via Authorization header)
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := json.Unmarshal(bodyBytes, &req); err != nil {
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
 		}
@@ -272,7 +275,7 @@ func main() {
 		switch req.Action {
 		case "publish":
 			// WHIP: Fahrzeug-Client (Larix) authentifiziert sich mit Stream Key
-			if whipStreamKey == "" || req.Password != whipStreamKey {
+			if whipStreamKey == "" || req.Token != whipStreamKey {
 				log.Warn("media auth: WHIP publish rejected", "path", req.Path)
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
@@ -281,7 +284,7 @@ func main() {
 		case "read":
 			// WHEP: Operator-Browser authentifiziert sich mit JWT
 			// Prüfung: Token nicht leer + aktive Session vorhanden
-			if req.Password == "" {
+			if req.Token == "" {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
