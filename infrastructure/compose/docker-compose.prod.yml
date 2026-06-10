@@ -35,6 +35,9 @@ services:
       LOG_LEVEL: "info"
       WHIP_STREAM_KEY: ${WHIP_STREAM_KEY}
       MEDIAMTX_API_URL: "http://mediamtx:9997"
+      TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP}
+      TURN_USER: ${TURN_USER}
+      TURN_PASSWORD: ${TURN_PASSWORD}
     volumes:
       - audit-data:/data/audit
     depends_on:
@@ -105,48 +108,44 @@ services:
       - avoc-net
     restart: unless-stopped
 
-  # ─── MediaMTX — WHIP/WHEP Router (ADR-020) ───────────────────────────────
+  # ─── MediaMTX — WHIP/WHEP Router (ADR-020, Sprint 10) ───────────────────
   mediamtx:
     image: bluenviron/mediamtx:latest
     ports:
-      - "8889:8889"   # WHIP/WHEP (Larix + Browser via nginx)
-      - "9997:9997"   # Management API (intern, für Control Server SAFE_MODE-Kick)
+      - "8889:8889/tcp"   # WHIP/WHEP Signaling (HTTP)
+      - "8189:8189/udp"   # WebRTC ICE mux UDP (eigener Port, Sprint 10)
+      - "9997:9997"       # Management API (intern, für Control Server SAFE_MODE-Kick)
     volumes:
       - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
     environment:
-      TURN_USER: ${TURN_USER}
-      TURN_PASSWORD: ${TURN_PASSWORD}
+      TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP}
     depends_on:
       - control-server
-      - stun-turn
     networks:
       - avoc-net
     restart: unless-stopped
 
-  # ─── coturn STUN/TURN (ADR-014, DEPLOY-05) ────────────────────────────────
-  # external-ip wird als Command-Flag übergeben — coturn kennt damit seine
-  # öffentliche Elastic IP und kann TURN relay korrekt ankündigen.
-  # Port-Range auf 49160-49200 begrenzt (entspricht Security Group, CDK).
+  # ─── coturn STUN/TURN (ADR-014, Sprint 10) ────────────────────────────────
+  # network_mode: host — coturn bindet Relay-Sockets direkt an EC2-Private-IP.
+  # Bridge-Networking würde 16384 Port-Mappings (49152-65535) erfordern.
+  # relay-ip=PRIVATE + external-ip=PUBLIC/PRIVATE: AWS-EC2 kennt eigene EIP nicht
+  # auf einem Netzwerk-Interface (kein Hairpin-NAT) — dieses Mapping ist Pflicht.
   stun-turn:
     image: coturn/coturn:latest
+    network_mode: host
     command: >
-      --external-ip=${TURN_EXTERNAL_IP}
+      --listening-port=3478
+      --relay-ip=${TURN_PRIVATE_IP}
+      --external-ip=${TURN_EXTERNAL_IP}/${TURN_PRIVATE_IP}
       --realm=${TURN_REALM}
       --user=${TURN_USER}:${TURN_PASSWORD}
-      --listening-port=3478
+      --min-port=49152
+      --max-port=65535
       --fingerprint
       --lt-cred-mech
       --no-cli
       --log-file=stdout
       --verbose
-      --min-port=49160
-      --max-port=49200
-    ports:
-      - "3479:3478/udp"
-      - "3479:3478/tcp"
-      - "49160-49200:49160-49200/udp"
-    networks:
-      - avoc-net
     restart: unless-stopped
 
   # ─── Loki ──────────────────────────────────────────────────────────────────

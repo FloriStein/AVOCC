@@ -117,11 +117,13 @@ services:
   mediamtx:
     image: bluenviron/mediamtx:latest
     ports:
-      - "8889:8889"   # WHIP/WHEP (Larix + Browser via nginx)
-      - "9997:9997"   # Management API (intern, für Control Server SAFE_MODE-Kick)
+      - "8889:8889/tcp"   # WHIP/WHEP Signaling (HTTP)
+      - "8889:8889/udp"   # WebRTC ICE Transport
+      - "9997:9997"       # Management API
     volumes:
       - ../mediamtx/mediamtx.yml:/mediamtx.yml:ro
     environment:
+      TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:-127.0.0.1}
       TURN_USER: ${TURN_USER:-avoc}
       TURN_PASSWORD: ${TURN_PASSWORD:-changeme}
     depends_on:

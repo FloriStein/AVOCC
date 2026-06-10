@@ -3,7 +3,7 @@
 Lifecycle: backlog → sprint → done
 Typen: S (<30 Min), M (30–180 Min), L (Architektur, ADR-pflichtig)
 
-Stand: 2026-06-05 — aktualisiert nach Sprint 9 (Video Stream, abgeschlossen)
+Stand: 2026-06-10 — aktualisiert nach Sprint 10 (WebRTC ICE Migration, deployed)
 
 ---
 
@@ -124,18 +124,34 @@ LOG-10 → LOG-11 (nach LOG-02)
 
 ---
 
+## EPIC: WebRTC ICE Migration (Sprint 10) ✅
+
+| ID | Task | Typ | Status | Abhängigkeiten |
+|----|------|-----|--------|----------------|
+| WEBRTC-01 | CDK Security Group: 3478 TCP/UDP, 8189 UDP, 49152–65535 UDP | S | ✅ Sprint 10 | — |
+| WEBRTC-02 | `mediamtx.yml`: `webrtcIPsFromInterfaces: false`, ICEServers2 entfernen, Port 8189 | S | ✅ Sprint 10 | — |
+| WEBRTC-03 | coturn `network_mode: host`, `relay-ip`, `external-ip=PUBLIC/PRIVATE` | M | ✅ Sprint 10 | WEBRTC-01 |
+| WEBRTC-04 | mediamtx UDP-Port 8889 → 8189 | S | ✅ Sprint 10 | WEBRTC-02 |
+| WEBRTC-05 | `deploy.sh`: `TURN_PRIVATE_IP` aus EC2 IMDS (IMDSv2) | S | ✅ Sprint 10 | WEBRTC-03 |
+| WEBRTC-06 | control-server: `GET /ice-config` Endpoint | M | ✅ Sprint 10 | — |
+| WEBRTC-07 | control-server env: `TURN_USER`, `TURN_PASSWORD`, `TURN_EXTERNAL_IP` | S | ✅ Sprint 10 | WEBRTC-06 |
+| WEBRTC-08 | `useWebRTC.ts`: DTLS-Fix, `/api/ice-config` fetch, 5s Gathering-Timeout | M | ✅ Sprint 10 | WEBRTC-06 |
+| WEBRTC-09 | Deploy auf EC2 + E2E Smoke Test | M | ✅ Sprint 10 (E2E offen) | WEBRTC-01–08 |
+
+---
+
 ## Offene Entscheidungen (blockieren zukünftige Tasks)
 
 | Entscheidung | Blockiert | Referenz |
 |---|---|---|
-| Session Recording Storage (DB / Files / Object Storage) | nach Sprint 9 | ADR-005 Folge — MemoryRecorder als Platzhalter |
+| Session Recording Storage (DB / Files / Object Storage) | offen | ADR-005 Folge — MemoryRecorder als Platzhalter |
 | DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
-| Backup-Strategie Audit Store (SQLite Volume → S3) | nach Sprint 9 | ADR-018 Folge — S3-Bucket im CDK vorhanden |
-| Migration zu AWS ECR | nach Sprint 9 | ADR-019 Folge — für Produktivbetrieb |
-| HTTPS / TLS-Terminierung auf EC2 | nach Sprint 9 | ADR-019 Folge — für Testphase HTTP akzeptabel |
-| MQTT-Authentifizierung (Mosquitto Passwort-File) | nach Sprint 9 | Port 1883 aktuell ohne Auth offen |
-| Multi-Vehicle / vehicleId-Routing in MediaMTX | Sprint 10 | ADR-020 Folge — Sprint 9 nutzt fixed path `vehicle-001` |
-| WHEP-Session-Zuordnung (mehrere Operatoren) | Sprint 10 | ADR-020 Folge |
+| Backup-Strategie Audit Store (SQLite Volume → S3) | offen | ADR-018 Folge — S3-Bucket im CDK vorhanden |
+| Migration zu AWS ECR | offen | ADR-019 Folge — für Produktivbetrieb |
+| HTTPS / TLS-Terminierung auf EC2 | offen | ADR-019 Folge — für Testphase HTTP akzeptabel |
+| MQTT-Authentifizierung (Mosquitto Passwort-File) | offen | Port 1883 aktuell ohne Auth offen |
+| Multi-Vehicle / vehicleId-Routing in MediaMTX | offen | ADR-020 Folge — Sprint 10 nutzt fixed path `vehicle-001` |
+| E2E Smoke Test mit aktiver WHIP-Quelle | offen | WEBRTC-09 Rest — Browser WiFi + 5G ICE-Pair verifizieren |
 
 ---
 
@@ -153,4 +169,7 @@ Phase 8 — EC2 Deployment via Docker Hub ✅ (abgeschlossen 2026-06-05)
 
 Phase 9 — Video Stream: Larix WHIP → MediaMTX → Browser ✅ (abgeschlossen 2026-06-05)
   STREAM-01..09 ✅
+
+Phase 10 — Browser WebRTC ICE Migration ✅ (deployed 2026-06-10)
+  WEBRTC-01..09 ✅ (E2E Smoke Test offen)
 ```

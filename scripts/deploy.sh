@@ -67,12 +67,20 @@ export GRAFANA_ADMIN_PASSWORD=$(get_secure /avoc/prod/grafana-admin-password)
 DOCKER_USERNAME=$(get                   /avoc/prod/docker-username)
 DOCKER_PASSWORD=$(get_secure            /avoc/prod/docker-password)
 
+# EC2 Private IP aus Instance Metadata Service (IMDS v2) — für coturn relay-ip + external-ip=PUBLIC/PRIVATE.
+# IMDSv2 erfordert Token-Header (Standard auf Amazon Linux 2023).
+_IMDS_TOKEN=$(curl -sf -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+export TURN_PRIVATE_IP=$(curl -sf -H "X-aws-ec2-metadata-token: ${_IMDS_TOKEN}" \
+  http://169.254.169.254/latest/meta-data/local-ipv4)
+
 export REGISTRY="docker.io/${DOCKER_USERNAME}"
 export VERSION
 
 echo "  JWT_SECRET          loaded"
 echo "  WHIP_STREAM_KEY     loaded"
 echo "  TURN_EXTERNAL_IP    ${TURN_EXTERNAL_IP}"
+echo "  TURN_PRIVATE_IP     ${TURN_PRIVATE_IP}"
 echo "  TURN_REALM          ${TURN_REALM}"
 echo "  REGISTRY            ${REGISTRY}"
 echo "  VERSION             ${VERSION}"

@@ -37,6 +37,9 @@ func main() {
 	authURL := envOr("AUTH_SERVICE_URL", "http://auth-service:8081")
 	whipStreamKey := os.Getenv("WHIP_STREAM_KEY")
 	mediamtxAPIURL := envOr("MEDIAMTX_API_URL", "http://mediamtx:9997")
+	turnExternalIP := os.Getenv("TURN_EXTERNAL_IP")
+	turnUser := os.Getenv("TURN_USER")
+	turnPassword := os.Getenv("TURN_PASSWORD")
 	mtxClient := mediamtx.NewClient(mediamtxAPIURL)
 
 	// --- Audit Writer (LOG-10/11 — ADR-018) ---
@@ -316,6 +319,26 @@ func main() {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
+	})
+
+	// ICE server config for WebRTC clients (WEBRTC-06 — Sprint 10).
+	// Returns STUN + TURN (UDP + TCP) servers so the browser can gather its own
+	// ICE candidates. No auth required — TURN credentials are per-design visible
+	// to anyone who loads the page (they're transmitted in WebRTC signalling anyway).
+	mux.HandleFunc("GET /ice-config", func(w http.ResponseWriter, _ *http.Request) {
+		type iceServer struct {
+			URLs       []string `json:"urls"`
+			Username   string   `json:"username,omitempty"`
+			Credential string   `json:"credential,omitempty"`
+		}
+		host := turnExternalIP
+		servers := []iceServer{
+			{URLs: []string{"stun:" + host + ":3478"}},
+			{URLs: []string{"turn:" + host + ":3478"}, Username: turnUser, Credential: turnPassword},
+			{URLs: []string{"turn:" + host + ":3478?transport=tcp"}, Username: turnUser, Credential: turnPassword},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"iceServers": servers})
 	})
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {

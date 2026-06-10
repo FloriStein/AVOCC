@@ -142,12 +142,12 @@ Das System ist in zwei klar getrennte Hubs unterteilt:
 ```
 CONTROL HUB (Rang 1 — Safety Truth)      VIDEO HUB (Rang 2 — Awareness only)
 ┌────────────────────────────────┐        ┌────────────────────────────────┐
-│        Control Server          │        │        WebRTC SFU (Pion)       │
-│  · 4-Layer State Machine       │        │  · Media Relay (Kamera-Streams)│
-│  · Safety Decision Engine      │        │  · Server-seitiges Recording   │
-│  · Session Manager (GSA)       │        │  · Multi-Operator Forwarding   │
-│  · Failure Detection           │        │  · empfängt Session-Events     │
-│  · Operator Handover           │        │    vom Control Hub             │
+│        Control Server          │        │   MediaMTX (WHIP/WHEP)         │
+│  · 4-Layer State Machine       │        │  · WHIP-Ingestion (Larix/5G)   │
+│  · Safety Decision Engine      │        │  · WHEP-Egress (Browser)       │
+│  · Session Manager (GSA)       │        │  · Auth-Hook → Control Server  │
+│  · Failure Detection           │        │  · SAFE_MODE-Kick per API      │
+│  · Operator Handover           │        │  · NAT-Traversal via coturn    │
 └──────┬───────────┬─────────────┘        └────────────────────────────────┘
        │           │
   Auth Service  Safety Bus   MQTT/Mosquitto
@@ -160,7 +160,7 @@ CONTROL HUB (Rang 1 — Safety Truth)      VIDEO HUB (Rang 2 — Awareness only)
 | Kanal | Protokoll | Zweck | Latenz-Ziel |
 |-------|-----------|-------|-------------|
 | **Control** | WebSocket + Protobuf (sync ACK) | Steuerbefehle, < 100ms Roundtrip | < 100ms (CI Build-Fail) |
-| **Video** | WebRTC SFU + coturn | Live-Video, NAT-traversal | 100–300ms (Soft-Ziel) |
+| **Video** | MediaMTX WHIP/WHEP + coturn | Live-Video, NAT-traversal (ADR-020) | 100–300ms (Soft-Ziel) |
 | **Telemetry** | MQTT (Mosquitto) | Fahrzeugstatus, async | — |
 | **Safety** | Go In-Memory Bus | Safety-Events, near-instant | Priority Channel |
 
@@ -220,12 +220,20 @@ Das Herzstück des Systems. Verantwortlich für:
 ### WebRTC SFU (`cmd/webrtc-sfu/`)
 
 - Selective Forwarding Unit auf Basis von Pion (Go-native WebRTC)
-- Empfängt Video-Streams vom Fahrzeug
-- Leitet an alle verbundenen Operatoren weiter
-- NAT-Traversal via coturn (STUN/TURN)
 - Erhält Session-Events vom Control Server (SESSION_CREATED, SESSION_SAFE_MODE, etc.)
+- **Hinweis:** Media-Routing erfolgt seit Sprint 9/10 über MediaMTX (ADR-020). Der Pion-SFU bleibt als Session-Event-Consumer aktiv.
 
 **Port:** 8084
+
+### MediaMTX
+
+- WHIP/WHEP Router für Live-Video (ADR-020)
+- Larix Broadcaster → WHIP; Operator-Browser → WHEP
+- Auth-Hook → Control Server (`POST /internal/media/auth`)
+- SAFE_MODE: Control Server kickt alle aktiven Subscriber via Management API
+- NAT-Traversal via coturn (STUN/TURN) — ICE-Gathering im Browser via `/api/ice-config`
+
+**Ports:** 8889 (WHIP/WHEP HTTP), 8189/UDP (ICE-Mux), 9997 (Management API, intern)
 
 ### Frontend (`frontend/`)
 
@@ -466,6 +474,7 @@ Explizite Bestätigung des Operators — **vor** Aktivierung UND nach Recovery a
 | Docker Compose | Container-Orchestrierung (kein Kubernetes) |
 | Eclipse Mosquitto | MQTT Broker |
 | coturn | STUN/TURN Server für WebRTC NAT-Traversal |
+| MediaMTX | WHIP/WHEP Router — Live-Video Ingestion + Distribution (ADR-020) |
 | nginx | Frontend Reverse Proxy |
 | Grafana Loki | Log-Aggregation (ADR-017) — Port 3100 |
 | Grafana | Log-Visualisierung, AVOC Session Dashboard (ADR-017) — Port 3001 |
@@ -649,7 +658,7 @@ Dateien wie `detector.go`, `statemachine.go`, `websocket.go` erfordern besondere
 
 Alle wichtigen Architekturentscheidungen sind als **Architecture Decision Records (ADRs)** dokumentiert. ADRs sind **unveränderlich** — neue Erkenntnisse führen zu einem neuen ADR, nicht zur Änderung eines bestehenden.
 
-### Übersicht der 18 ADRs
+### Übersicht der 20 ADRs
 
 | ADR | Titel | Kern-Entscheidung |
 |-----|-------|-------------------|
@@ -667,11 +676,13 @@ Alle wichtigen Architekturentscheidungen sind als **Architecture Decision Record
 | ADR-012 | Message Flow Runtime | Field-based Protobuf Versioning |
 | ADR-012b | Sync/Async Model | Welche Kanäle sync vs. async |
 | ADR-013 | Frontend Tech Stack | React 18 + TypeScript + Vite + Tailwind + protoc-gen-es |
-| ADR-014 | Video Streaming | WebRTC SFU (Pion/Go) + coturn |
+| ADR-014 | Video Streaming | WebRTC SFU (Pion/Go) + coturn — Architekturprinzip |
 | ADR-015 | Session Coordinator | Control Server als GSA |
 | ADR-016 | Session Correlation ID | ULID als systemweite Korrelations-ID |
 | ADR-017 | Logging Strategy | Hybrid: async slog → Loki + sync AuditWriter |
 | ADR-018 | Audit Trail Strategy | SQLite WAL für garantierte Safety-Event-Persistenz |
+| ADR-019 | Deployment-Strategie | Docker Hub + EC2 + AWS SSM Parameter Store |
+| ADR-020 | Video Ingestion & Distribution | MediaMTX WHIP/WHEP + Browser-ICE-Gathering via `/api/ice-config` |
 
 Vollständige ADRs: [docs/adr/](docs/adr/) | Live-Übersicht: [DECISIONS.MD](DECISIONS.MD)
 
@@ -1319,4 +1330,4 @@ func TestSafety_InvalidTransitionRejected(t *testing.T) {
 
 ---
 
-*Stand: Sprint 7 abgeschlossen ✅ | Alle 7 Sprints · 42 Tasks · 18 ADRs abgeschlossen (2026-06-04)*
+*Stand: Sprint 10 deployed ✅ | 10 Sprints · 76 Tasks · 20 ADRs | E2E Smoke Test (WHIP-Quelle) ausstehend (2026-06-10)*

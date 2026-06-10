@@ -9,11 +9,22 @@ export type MediaState =
   | 'MEDIA_DEGRADED'
   | 'MEDIA_FAILED'
 
-export function useWebRTC(sessionId: string | null, vehicleId: string, enabled: boolean) {
+async function fetchIceServers(): Promise<RTCIceServer[]> {
+  try {
+    const res = await fetch('/api/ice-config')
+    if (!res.ok) throw new Error(`ice-config ${res.status}`)
+    const { iceServers } = await res.json()
+    return iceServers
+  } catch {
+    // Fallback: STUN only — works on non-CGNAT networks (WiFi/DSL)
+    return [{ urls: `stun:${window.location.hostname}:3478` }]
+  }
+}
+
+export function useWebRTC(sessionId: string | null, vehicleId: string, token: string | null, enabled: boolean) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [mediaState, setMediaState] = useState<MediaState>('MEDIA_INIT')
   const pcRef = useRef<RTCPeerConnection | null>(null)
-  const tokenRef = useRef<string | null>(null)
 
   const updateState = useCallback((state: MediaState) => {
     setMediaState(state)
@@ -32,13 +43,12 @@ export function useWebRTC(sessionId: string | null, vehicleId: string, enabled: 
   }, [])
 
   const connect = useCallback(async () => {
-    if (!sessionId || !vehicleId) return
+    if (!sessionId || !vehicleId || !token) return
     disconnect()
     updateState('MEDIA_NEGOTIATING')
 
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: `stun:${window.location.hostname}:3479` }],
-    })
+    const iceServers = await fetchIceServers()
+    const pc = new RTCPeerConnection({ iceServers })
     pcRef.current = pc
 
     pc.addTransceiver('video', { direction: 'recvonly' })
@@ -58,25 +68,33 @@ export function useWebRTC(sessionId: string | null, vehicleId: string, enabled: 
 
     try {
       const offer = await pc.createOffer()
-      await pc.setLocalDescription(offer)
 
-      // WHEP: ICE-Gathering vollständig abwarten (non-trickle)
+      // Pion v1.19.0 DTLS-Client-Bug: nach dem Senden von ClientHello verarbeitet Pion
+      // den ServerHello des Browsers nicht → Retransmit-Loop bis Timeout.
+      // Fix: Browser wird DTLS-Client (active), MediaMTX wird DTLS-Server (passive).
+      // Pions DTLS-Server-Pfad ist stabil; nur der Client-Pfad hat diesen Bug.
+      const fixedSdp = offer.sdp!.replace(/a=setup:actpass/g, 'a=setup:active')
+      await pc.setLocalDescription({ type: 'offer', sdp: fixedSdp })
+
+      // WHEP: alle ICE-Candidates vollständig abwarten bevor der Offer gesendet wird.
+      // MediaMTX erwartet alle Candidates im initialen POST (kein Trickle-ICE).
       await new Promise<void>(resolve => {
         if (pc.iceGatheringState === 'complete') { resolve(); return }
+        const tid = setTimeout(resolve, 5000)
         pc.addEventListener('icegatheringstatechange', function handler() {
           if (pc.iceGatheringState === 'complete') {
+            clearTimeout(tid)
             pc.removeEventListener('icegatheringstatechange', handler)
             resolve()
           }
         })
       })
 
-      // WHEP: raw SDP als Body, Content-Type application/sdp (ADR-020)
       const res = await fetch(`/whep/${vehicleId}/whep`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/sdp',
-          ...(tokenRef.current ? { 'Authorization': `Bearer ${tokenRef.current}` } : {}),
+          'Authorization': `Bearer ${token}`,
         },
         body: pc.localDescription!.sdp,
       })
@@ -88,17 +106,17 @@ export function useWebRTC(sessionId: string | null, vehicleId: string, enabled: 
     } catch {
       updateState('MEDIA_FAILED')
     }
-  }, [sessionId, vehicleId, disconnect, updateState])
+  }, [sessionId, vehicleId, token, disconnect, updateState])
 
   useEffect(() => {
-    if (enabled && sessionId) {
+    if (enabled && sessionId && token) {
       connect()
     } else {
       disconnect()
     }
     return disconnect
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, sessionId, vehicleId])
+  }, [enabled, sessionId, vehicleId, token])
 
-  return { videoRef, mediaState, connect, disconnect, tokenRef }
+  return { videoRef, mediaState, connect, disconnect }
 }

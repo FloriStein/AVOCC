@@ -118,6 +118,7 @@ Response:
 
 ## ICE / NAT-Traversal
 
+**Sprint 9 (ursprünglicher Plan):**
 ```yaml
 webrtcICEServers2:
   - url: stun:coturn:3478
@@ -126,8 +127,32 @@ webrtcICEServers2:
     password: ${TURN_PASSWORD}
 ```
 
-TURN_USER und TURN_PASSWORD stammen aus SSM (bereits in deploy.sh vorhanden).
-Kein neuer SSM-Parameter für TURN.
+**Sprint 10 Nachtrag — `webrtcICEServers2` entfernt:**
+
+Die ursprüngliche Konfiguration verursachte zwei Probleme:
+1. MediaMTX gatherte eigene ICE-Candidates auf ephemeren Ports → `srflx`-Candidates auf Port-Ranges, die im Security Group nicht offen waren
+2. Candidate Explosion: `webrtcIPsFromInterfaces` fehlte → alle Docker-Bridge-IPs wurden annonciert
+
+Neue Konfiguration:
+```yaml
+webrtcIPsFromInterfaces: false
+webrtcAdditionalHosts: ["${TURN_EXTERNAL_IP}"]  # nur EC2 Elastic IP
+webrtcLocalUDPAddress: :8189                     # fixer ICE-Mux-Port
+# webrtcICEServers2 entfernt — Browser übernimmt vollständig das ICE-Gathering
+```
+
+Der Browser erhält die ICE-Server-Liste zur Laufzeit via `GET /api/ice-config` vom Control Server:
+```json
+{
+  "iceServers": [
+    { "urls": ["stun:18.196.24.10:3478"] },
+    { "urls": ["turn:18.196.24.10:3478"], "username": "...", "credential": "..." },
+    { "urls": ["turn:18.196.24.10:3478?transport=tcp"], "username": "...", "credential": "..." }
+  ]
+}
+```
+
+Damit gathert **ausschließlich der Browser** ICE-Candidates — MediaMTX gibt nur seinen öffentlichen UDP-Mux-Endpunkt bekannt. Referenz: `cmd/control-server/main.go` (`GET /ice-config`), `frontend/src/hooks/useWebRTC.ts` (`fetchIceServers`).
 
 ## SAFE_MODE-Integration
 
@@ -151,17 +176,19 @@ MediaMTX-Pfad = vehicleId (statisch, in Larix konfiguriert).
 - Larix WHIP-URL: `http://<EC2-IP>:8889/vehicle-001/whip`
 - Browser WHEP-URL: `http://<EC2-IP>:3000/whep/vehicle-001/whep` (via nginx)
 
-Multi-Vehicle-Routing (dynamische vehicleId-to-path-Zuordnung) ist eine Folge-Entscheidung
-für Sprint 10 (ADR-020-Folge, `tasks/backlog.md`).
+Multi-Vehicle-Routing (dynamische vehicleId-to-path-Zuordnung) ist eine offene Folge-Entscheidung
+(ADR-020-Folge, `tasks/backlog.md`). Sprint 10 behält den Fixed-Path `vehicle-001`.
 
 ## Neue Ports / Services
 
-| Service | Port | Zweck |
-|---------|------|-------|
-| MediaMTX | 8889 | WHIP/WHEP (extern für Larix + intern für Browser via nginx) |
-| MediaMTX | 9997 | Management API (nur Docker-intern) |
+| Service | Port | Protokoll | Zweck |
+|---------|------|-----------|-------|
+| MediaMTX | 8889 | TCP | WHIP/WHEP HTTP (extern für Larix + intern für Browser via nginx) |
+| MediaMTX | 8189 | UDP | ICE Media-Mux (Sprint 10 — fixer Port für Security Group) |
+| MediaMTX | 9997 | TCP | Management API (nur Docker-intern) |
 
-CDK Security Group: Port 8889 TCP muss geöffnet werden.
+CDK Security Group: Port 8889 TCP + 8189 UDP müssen offen sein.
+Sprint 10: zusätzlich coturn auf Port 3478 TCP/UDP + Relay-Range 49152–65535 UDP.
 
 ## ADR-014-Abgrenzung
 
@@ -180,6 +207,6 @@ des SFU-Konzepts. Pion bleibt als Session-Event-Consumer aktiv.
 - Pion-SFU ohne ausgehende Calls = ADR-007-konform
 
 ### Negativ
-- Zusätzlicher Docker-Service (Ressourcen auf t3.micro knapp)
+- Zusätzlicher Docker-Service (Ressourcen auf t3.small knapp — Upgrade von t3.micro in Sprint 10)
 - Pion-SFU `/offer`+`/subscribe`-Endpunkte werden für Media nicht mehr genutzt
-- Multi-Vehicle-Routing noch nicht implementiert (Sprint 10)
+- Multi-Vehicle-Routing noch nicht implementiert (offene Folge-Entscheidung)

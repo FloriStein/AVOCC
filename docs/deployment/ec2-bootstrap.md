@@ -15,7 +15,7 @@ Dev-Rechner                          EC2-Instanz
 1. cdk deploy          ──────────▶   EC2 + IAM + Security Group
 2. setup-ssm.sh        ──────────▶   SSM Parameter Store (/avoc/prod/*)
 3. make push           ──────────▶   Docker Hub (private Repos)
-4. deploy.sh kopieren  ──────────▶   /home/ec2-user/app/
+4. deploy.sh kopieren  ──────────▶   /home/ec2-admin/app/
 5.                                   deploy.sh ausführen → Stack läuft
 ```
 
@@ -115,30 +115,39 @@ docker compose version
 ```bash
 ELASTIC_IP=1.2.3.4
 
-# deploy.sh und prod Compose auf die Instanz kopieren
-scp scripts/deploy.sh                               ec2-user@${ELASTIC_IP}:~/app/
-scp infrastructure/compose/docker-compose.prod.yml  ec2-user@${ELASTIC_IP}:~/app/
-scp infrastructure/mosquitto/mosquitto.conf         ec2-user@${ELASTIC_IP}:~/app/mosquitto/
-scp -r infrastructure/loki/                         ec2-user@${ELASTIC_IP}:~/app/
-scp -r infrastructure/promtail/                     ec2-user@${ELASTIC_IP}:~/app/
-scp -r infrastructure/grafana/                      ec2-user@${ELASTIC_IP}:~/app/
+# Verzeichnisse auf EC2 anlegen (einmalig, via SSM Session oder SSH)
+# ssh ec2-admin@${ELASTIC_IP} "mkdir -p ~/app/mosquitto ~/loki ~/promtail ~/grafana/provisioning/datasources ~/grafana/provisioning/dashboards"
+
+# deploy.sh und prod Compose
+scp scripts/deploy.sh                                 ec2-admin@${ELASTIC_IP}:~/app/
+scp infrastructure/compose/docker-compose.prod.yml    ec2-admin@${ELASTIC_IP}:~/app/
+scp infrastructure/mosquitto/mosquitto.conf           ec2-admin@${ELASTIC_IP}:~/app/mosquitto/
+
+# Loki + Promtail: eigene Verzeichnisse (bind-mount Pfade in docker-compose.prod.yml)
+scp infrastructure/loki/loki.yml                      ec2-admin@${ELASTIC_IP}:~/loki/loki.yml
+scp infrastructure/promtail/promtail.yml              ec2-admin@${ELASTIC_IP}:~/promtail/promtail.yml
+
+# Grafana
+scp infrastructure/grafana/provisioning/datasources/loki.yml \
+                                                      ec2-admin@${ELASTIC_IP}:~/grafana/provisioning/datasources/
+scp infrastructure/grafana/provisioning/dashboards/dashboards.yml \
+    infrastructure/grafana/provisioning/dashboards/avoc.json \
+                                                      ec2-admin@${ELASTIC_IP}:~/grafana/provisioning/dashboards/
 ```
 
-> Alternativ via AWS SSM Session Manager + S3-Bucket (kein SSH nötig):
-> ```bash
-> BUCKET=streamingstack-appbucket-xyz
-> aws s3 cp scripts/deploy.sh s3://${BUCKET}/deploy.sh
-> aws s3 cp infrastructure/compose/docker-compose.prod.yml s3://${BUCKET}/
-> # ... auf EC2: aws s3 sync s3://${BUCKET}/ ~/app/
-> ```
+> **Wichtig:** Loki und Promtail müssen in `~/loki/` bzw. `~/promtail/` liegen (nicht unter `~/app/`),
+> da `docker-compose.prod.yml` diese Pfade als bind-mount Quelle referenziert. Werden die Dateien nach
+> `docker compose up` hochgeladen (oder existiert der Pfad vorher nicht), erstellt Docker ein Verzeichnis
+> statt eine Datei → Container crasht mit `read /etc/loki/config.yaml: is a directory`.
 
-Verzeichnisstruktur auf EC2 (erwartet von `deploy.sh`):
+Verzeichnisstruktur auf EC2 (erwartet von `deploy.sh` und `docker-compose.prod.yml`):
 ```
-/home/ec2-user/app/
-├── docker-compose.prod.yml
-├── deploy.sh
-├── mosquitto/
-│   └── mosquitto.conf
+/home/ec2-admin/
+├── app/
+│   ├── docker-compose.prod.yml
+│   ├── deploy.sh
+│   └── mosquitto/
+│       └── mosquitto.conf
 ├── loki/
 │   └── loki.yml
 ├── promtail/
@@ -164,6 +173,11 @@ cd ~/app
 AWS_REGION=eu-central-1 VERSION=latest bash deploy.sh
 ```
 
+> **Hinweis IMDSv2:** `deploy.sh` liest `TURN_PRIVATE_IP` automatisch aus dem EC2 Instance Metadata Service
+> (IMDSv2 mit Token-Header). Amazon Linux 2023 erfordert IMDSv2 — IMDSv1 (`curl http://169.254.169.254/...`
+> ohne Token) liefert einen leeren Wert. Ist `TURN_PRIVATE_IP` leer, startet coturn ohne `relay-ip` und
+> TURN-Relay funktioniert nicht.
+
 Der Stack ist bereit, wenn alle Container `healthy` / `running` sind:
 ```bash
 docker compose -f docker-compose.prod.yml ps
@@ -179,7 +193,7 @@ docker compose -f docker-compose.prod.yml ps
 | Control Server API | `http://<ELASTIC_IP>:8080` |
 | MQTT Broker (Vehicle) | `<ELASTIC_IP>:1883` |
 | Grafana | `http://<ELASTIC_IP>:3001` |
-| STUN/TURN | `<ELASTIC_IP>:3479` |
+| STUN/TURN | `<ELASTIC_IP>:3478` |
 
 ---
 
@@ -208,8 +222,10 @@ aws sts get-caller-identity
 ```
 
 **coturn TURN relay funktioniert nicht:**
-- Security Group: UDP 49160-49200 muss offen sein (CDK: `ec2.Port.udpRange(49160, 49200)`)
+- Security Group: Port 3478 TCP+UDP und UDP 49152–65535 (Relay-Range) müssen offen sein
 - `TURN_EXTERNAL_IP` in SSM prüfen: muss die Elastic IP sein (nicht die private IP)
+- `TURN_PRIVATE_IP` wird automatisch via IMDSv2 in `deploy.sh` gesetzt — bei leerem Wert läuft coturn ohne relay-ip
+- coturn `network_mode: host` in `docker-compose.prod.yml` erforderlich (kein Port-Mapping für 16384 Relay-Ports)
 
 **Grafana Login schlägt fehl:**
 ```bash
@@ -218,12 +234,12 @@ aws ssm get-parameter --name /avoc/prod/grafana-admin-user --region eu-central-1
   --query Parameter.Value --output text
 ```
 
-**Speicher auf t3.micro knapp:**
+**Speicher auf t3.small knapp:**
 ```bash
 free -h
 docker stats --no-stream
 ```
-Bei dauerhaft >80% RAM-Auslastung: Upgrade auf t3.small (CDK `InstanceSize.SMALL`).
+Bei dauerhaft >80% RAM-Auslastung auf t3.small: Upgrade auf t3.medium (CDK `InstanceSize.MEDIUM`).
 Achtung: Instance-Replacement durch CloudFormation.
 
 ---

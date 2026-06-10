@@ -1,10 +1,16 @@
 # MediaMTX — WHIP/WHEP Router (ADR-020)
 #
-# WHIP: Larix Broadcaster → POST /vehicle-001/whip (Bearer Stream Key)
+# WHIP: Browser/Fahrzeug → POST /vehicle-001/whip (Bearer Stream Key)
 # WHEP: Operator Browser  → POST /vehicle-001/whep (Bearer JWT)
 #
-# Auth: externalAuthenticationURL → Control Server /internal/media/auth
-# ICE:  STUN + TURN via coturn (TURN_USER + TURN_PASSWORD als Env-Variablen)
+# Auth: authMethod/authHTTPAddress → Control Server /internal/media/auth
+#
+# ICE-Strategie (Sprint 10):
+#   MediaMTX gathert KEINE eigenen STUN/TURN-Candidates (kein webrtcICEServers2).
+#   Einziger ICE-Candidate von MediaMTX: host:TURN_EXTERNAL_IP:8189 (EC2 Elastic IP).
+#   Der Browser gathert seinen Candidate-Satz (srflx + relay) über /api/ice-config.
+#   Funktionierende ICE-Pairs: browser-srflx ↔ mediamtx-host  oder
+#                               browser-relay ↔ mediamtx-host (TURN-Relay via coturn)
 
 ###############################################################################
 # API (Management — nur intern, nicht nach außen exponiert)
@@ -22,27 +28,36 @@ logDestinations: [stdout]
 # WebRTC / WHIP / WHEP
 ###############################################################################
 webrtc: yes
-webrtcAddress: :8889
+webrtcAddress: :8889          # HTTP Signaling (WHIP/WHEP POST)
 
-# ICE-Server für Browser und Fahrzeug hinter NAT (5G-Netz).
-# TURN_USER und TURN_PASSWORD werden zur Laufzeit als Env-Variablen injiziert.
-webrtcICEServers2:
-  - url: stun:coturn:3478
-  - url: turn:coturn:3478
-    username: ${TURN_USER}
-    password: ${TURN_PASSWORD}
+# EC2 liegt hinter NAT — nur die öffentliche Elastic IP als Host-Candidate annoncieren.
+# TURN_EXTERNAL_IP wird von docker-compose als Env-Var injiziert.
+webrtcAdditionalHosts: ["${TURN_EXTERNAL_IP}"]
+
+# Alle Interface-Candidates unterdrücken (Docker-interne IPs 172.x, 10.x, 127.x).
+# Ohne dieses Flag: Candidate Explosion → ICE-Timeout 30-60s (Sprint 10 Root Cause #1).
+webrtcIPsFromInterfaces: false
+
+# UDP ICE mux auf eigenem Port (getrennt von HTTP Signaling auf 8889).
+# Port 8189 muss in Security Group als UDP offen sein (WEBRTC-01).
+webrtcLocalUDPAddress: :8189
+
+# 60s statt default 10s — gibt TURN-Relay-Pfad genug Zeit für ICE + DTLS Handshake.
+webrtcHandshakeTimeout: 60s
+
+# CORS — Browser darf WHEP-Requests von beliebiger Origin senden.
+webrtcAllowOrigins:
+  - "*"
 
 ###############################################################################
 # Auth — alle Publish/Read-Requests → Control Server
 # Ein einziger Mechanismus für WHIP (stream key) und WHEP (JWT).
 ###############################################################################
-externalAuthenticationURL: http://control-server:8080/internal/media/auth
+authMethod: http
+authHTTPAddress: http://control-server:8080/internal/media/auth
 
 ###############################################################################
 # Paths — alle Fahrzeug-Pfade folgen dem Schema vehicle-*
 ###############################################################################
 paths:
   "~^vehicle-.*":
-    # Larix publisht via WHIP mit Bearer Stream Key.
-    # Browser subscribed via WHEP mit Bearer JWT.
-    # Beide Requests werden vom auth hook validiert.

@@ -1,13 +1,13 @@
 # Implementation Plan — Teleoperation System
 
-Stand: 2026-06-05
-Status: Phase 1–9 abgeschlossen ✅ · 67 Tasks · 20 ADRs
+Stand: 2026-06-10
+Status: Phase 1–10 abgeschlossen ✅ · Sprint 10 deployed · 76 Tasks · 20 ADRs · E2E Smoke Test ausstehend
 
 ---
 
 ## 1. Executive Summary
 
-Wir bauen ein sicheres, modulares Echtzeit-Teleoperation-System zur Fernsteuerung von Fahrzeugen über das offene Internet (Vehicle ↔ Internet ↔ OCC, uncontrolled routing). Die Architektur ist durch 18 ADRs entschieden. Nach 7 Sprints (42 Tasks) ist das System vollständig implementiert: Frontend, Backend, Video-Channel, Test-Infrastruktur und das Logging-System (ADR-017/018) mit strukturiertem slog, SQLite Audit Trail und Loki + Grafana sind implementiert. Sprint 8 bringt das System auf AWS EC2 via Docker Hub (ADR-019).
+Wir bauen ein sicheres, modulares Echtzeit-Teleoperation-System zur Fernsteuerung von Fahrzeugen über das offene Internet (Vehicle ↔ Internet ↔ OCC, uncontrolled routing). Die Architektur ist durch 20 ADRs entschieden. Nach 10 Sprints (76 Tasks) ist das System vollständig implementiert und auf AWS EC2 deployed: Frontend, Backend, Video-Channel (MediaMTX WHIP/WHEP, ADR-020), Test-Infrastruktur, Logging (ADR-017/018) und Browser-ICE-Migration (Sprint 10, STUN+TURN via `/api/ice-config`).
 
 **Nicht-Verhandelbar:**
 - Safety First — SAFE MODE ist nicht überbrückbar, Video darf SAFE MODE nie triggern
@@ -33,7 +33,7 @@ Wir bauen ein sicheres, modulares Echtzeit-Teleoperation-System zur Fernsteuerun
 | Control Channel | WebSocket (WSS + JWT), Event-driven Stream, sync ACK | ADR-004/010/012b |
 | Telemetry Channel | MQTT via Eclipse Mosquitto, async | ADR-003/012b |
 | Safety Channel | Safety Event Bus (Go, In-Memory, DDS-ready), async | ADR-002/012b |
-| Video Channel | WebRTC SFU (Pion/Go) + coturn (STUN/TURN) | ADR-014 |
+| Video Channel | MediaMTX WHIP/WHEP + coturn (STUN/TURN) | ADR-014/020 |
 | WebRTC Signaling | SDP/ICE — Media Layer, bewusst außerhalb Protobuf | ADR-014/008 |
 | Authentifizierung | Separater Auth Service (Operator + Vehicle JWT) + Operator-Rollen | ADR-004 |
 | Session Recording | Abstraktes Interface (Persistenz-ADR offen) | ADR-005 |
@@ -392,18 +392,39 @@ Control Server als einzige Auth- und SAFE_MODE-Kontrollinstanz über MediaMTX.
 ## 9. Vollständige Task-Übersicht
 
 ```
-67 Tasks gesamt / 9 Epics — Phase 1–9 abgeschlossen ✅
+76 Tasks gesamt / 10 Epics — Phase 1–10 abgeschlossen ✅
 
-Phase 1 ✅ (Sprint 1): INFRA-01, FE-01, BE-01, BE-02, BE-03, BE-11, DC-01, DC-02, DC-03
-Phase 2 ✅:            BE-06, BE-09, BE-10, BE-12, TEST-01, TEST-02
-Phase 3 ✅:            FE-02, FE-03, FE-04, FE-08, FE-09
-Phase 4 ✅:            BE-04, BE-05, BE-07, BE-08
-Phase 5 ✅:            FE-05, FE-06, FE-07
-Phase 6 ✅:            TEST-03, TEST-04, TEST-05, DC-04
-Phase 7 ✅:            LOG-01..11
-Phase 8 ✅ (Sprint 8): DEPLOY-01..07
-Phase 9 ✅ (Sprint 9): STREAM-01..09
+Phase 1  ✅ (Sprint 1):  INFRA-01, FE-01, BE-01, BE-02, BE-03, BE-11, DC-01, DC-02, DC-03
+Phase 2  ✅:             BE-06, BE-09, BE-10, BE-12, TEST-01, TEST-02
+Phase 3  ✅:             FE-02, FE-03, FE-04, FE-08, FE-09
+Phase 4  ✅:             BE-04, BE-05, BE-07, BE-08
+Phase 5  ✅:             FE-05, FE-06, FE-07
+Phase 6  ✅:             TEST-03, TEST-04, TEST-05, DC-04
+Phase 7  ✅:             LOG-01..11
+Phase 8  ✅ (Sprint 8):  DEPLOY-01..07
+Phase 9  ✅ (Sprint 9):  STREAM-01..09
+Phase 10 ✅ (Sprint 10): WEBRTC-01..09 (E2E Smoke Test mit WHIP-Quelle ausstehend)
 ```
+
+---
+
+### Phase 10 — Browser WebRTC ICE Migration ✅ *(Sprint 10, deployed 2026-06-10)*
+
+**Ziel:** WHEP-basierter Browser-Videoempfang zuverlässig auf allen Netzwerken (WiFi + 5G/LTE).
+Drei Root Causes aus Sprint-9-Debugging behoben: Candidate Explosion, srflx auf gesperrten Ports,
+Pion DTLS-Client-Bug. Referenz: [`docs/sprints/sprint-10-webrtc-ice-migration.md`](sprints/sprint-10-webrtc-ice-migration.md)
+
+| ID | Task | Typ | Abhängigkeiten |
+|----|------|-----|----------------|
+| WEBRTC-01 | CDK Security Group: 3479 → 3478, UDP 8189, Relay 49152–65535 | S | — |
+| WEBRTC-02 | `mediamtx.yml`: `webrtcIPsFromInterfaces: false`, `webrtcICEServers2` entfernen, `handshakeTimeout: 60s` | S | — |
+| WEBRTC-03 | `docker-compose.prod.yml`: coturn `network_mode: host`, `relay-ip`, `external-ip=PUBLIC/PRIVATE` | M | WEBRTC-01 |
+| WEBRTC-04 | `docker-compose.prod.yml`: mediamtx UDP 8889 → 8189 | S | WEBRTC-02 |
+| WEBRTC-05 | `deploy.sh`: `TURN_PRIVATE_IP` aus EC2-Instance-Metadata | S | WEBRTC-03 |
+| WEBRTC-06 | control-server: `GET /api/ice-config` — TURN-Credentials für Browser | M | — |
+| WEBRTC-07 | `docker-compose.prod.yml`: control-server `TURN_USER` + `TURN_PASSWORD` env | S | WEBRTC-06 |
+| WEBRTC-08 | `useWebRTC.ts`: DTLS-Fix, TURN ICE-Server (UDP+TCP, Port 3478), ice-config fetch | M | WEBRTC-06 |
+| WEBRTC-09 | `cdk deploy` + `deploy.sh` + E2E Smoke Test (WiFi + 5G) | M | WEBRTC-01–08 |
 
 ---
 
@@ -414,14 +435,15 @@ Phase 9 ✅ (Sprint 9): STREAM-01..09
 | Prioritätsmodell technisch (Channels vs. Header-Flag) | offen | ADR-008 Folge — BE-04 nutzt Publisher-Pattern; explizite Channel-Trennung noch offen |
 | Session Recording Storage (DB/Files/Object Storage) | offen | ADR-005 Folge — MemoryRecorder als Platzhalter; Storage-ADR ausstehend |
 | DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
-| Backup-Strategie Audit Store (SQLite Volume → S3) | nach Sprint 8 | ADR-018 Folge — S3-Bucket im CDK vorhanden; ADR-020 möglich |
-| Migration zu AWS ECR | nach Sprint 8 | ADR-019 Folge — für Produktivbetrieb |
-| HTTPS / TLS-Terminierung auf EC2 | nach Sprint 8 | ADR-019 Folge — für Testphase HTTP akzeptabel |
-| MQTT-Authentifizierung (Mosquitto Passwort-File) | nach Sprint 8 | Port 1883 aktuell ohne Auth offen |
+| Backup-Strategie Audit Store (SQLite Volume → S3) | offen | ADR-018 Folge — S3-Bucket im CDK vorhanden |
+| Migration zu AWS ECR | offen | ADR-019 Folge — für Produktivbetrieb |
+| HTTPS / TLS-Terminierung auf EC2 | offen | ADR-019 Folge — für Testphase HTTP akzeptabel |
+| MQTT-Authentifizierung (Mosquitto Passwort-File) | offen | Port 1883 aktuell ohne Auth offen |
+| E2E Smoke Test (Browser WiFi + 5G TURN-Relay) | offen | WEBRTC-09 Rest — WHIP-Quelle (Larix) nötig |
 
 ---
 
-## 11. ADR-Index (19 ADRs)
+## 11. ADR-Index (20 ADRs)
 
 | ADR | Titel | Entscheidung |
 |-----|-------|-------------|
@@ -445,3 +467,4 @@ Phase 9 ✅ (Sprint 9): STREAM-01..09
 | [ADR-017](adr/017-logging-strategy.md) | Logging Strategy | Hybrid: Technical async (slog → Loki); Safety sync (AuditWriter.WriteSync); 3 Log-Klassen; Frontend via POST /log |
 | [ADR-018](adr/018-audit-trail-strategy.md) | Audit Trail Strategy | SQLite WAL als AuditWriter; fsync vor SAFE_MODE; garantierte Safety-Event-Persistenz; kein extra Service |
 | [ADR-019](adr/019-deployment-strategy.md) | Deployment-Strategie | Docker Hub private Repos + EC2 Elastic IP + AWS SSM Parameter Store; linux/amd64; kein Quellcode auf EC2 |
+| [ADR-020](adr/020-mediamtx-whip-whep.md) | Video Ingestion & Distribution | MediaMTX WHIP/WHEP; Larix→WHIP; Browser→WHEP; Control Server = einzige Auth-Instanz; Browser-ICE-Gathering via `/api/ice-config` |

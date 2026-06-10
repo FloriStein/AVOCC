@@ -39,15 +39,14 @@ export class StreamingStack extends cdk.Stack {
     // ACHTUNG: Mosquitto läuft ohne Auth — in Produktion auf Vehicle-IP einschränken
     sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(1883), "MQTT Broker");
 
-    // GEÄNDERT: coturn STUN/TURN — Host-Port 3479 → Container 3478 (laut docker-compose.yml)
-    // War vorher 3478 (falsch für dieses Compose-Mapping)
-    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(3479), "coturn TCP");
-    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.udp(3479), "coturn UDP");
+    // coturn STUN/TURN — network_mode: host → bindet direkt an Port 3478 (kein Bridge-Mapping)
+    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(3478), "coturn TCP");
+    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.udp(3478), "coturn UDP");
 
-    // BEHALTEN: coturn TURN Relay-Ports — passt zu min-port=49152 in turnserver.conf
+    // TURN relay ports — volle Range für coturn relay allocation (Sprint 10: 49160-49200 war zu eng)
     sg.addIngressRule(
       ec2.Peer.anyIpv4(),
-      ec2.Port.udpRange(49160, 49200),
+      ec2.Port.udpRange(49152, 65535),
       "TURN relay",
     );
 
@@ -62,15 +61,10 @@ export class StreamingStack extends cdk.Stack {
     // ACHTUNG: In Produktion auf eigene IP einschränken: ec2.Peer.ipv4("DEINE_IP/32")
     sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(3001), "Grafana");
 
-    // NEU: MediaMTX WHIP/WHEP — Larix Broadcaster + Browser (ADR-020)
-    // WHIP: Larix sendet direkt auf Port 8889 (kein nginx-Proxy für Ingress)
-    // WHEP: Browser-Anfragen via nginx auf Port 3000, intern an MediaMTX:8889
-    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(8889), "MediaMTX WHIP/WHEP");
-
-    // ENTFERNT:
-    // - 8554/tcp (RTSP) — nicht Teil der AVOC-Architektur
-    // - 8189/udp (WebRTC alt) — SFU läuft auf 8084 intern, Media über 10000-10050/udp
-    // - 8081/tcp "Control WebSocket" — Auth Service ist intern, über nginx auf Port 3000 erreichbar
+    // MediaMTX WHIP/WHEP — HTTP Signaling (ADR-020)
+    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(8889), "MediaMTX WHIP/WHEP HTTP");
+    // MediaMTX ICE UDP mux — separater Port vom HTTP Signaling (Sprint 10)
+    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.udp(8189), "MediaMTX ICE mux UDP");
 
     // =========================
     // S3 Bucket

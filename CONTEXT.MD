@@ -19,8 +19,8 @@
 | **Safety Event Bus** | Go-Service, In-Memory; ersetzt DDS in dieser Phase; DDS-Interface-kompatibel (ADR-002) |
 | **Global Session Authority (GSA)** | Control Server als einziger Session-Erzeuger, -Verwalter und -Zerstörer (ADR-015) |
 | **Control Hub** | Control Server als Rang-1-Hub für Safety Truth und Command Routing (ADR-007) |
-| **Video Hub** | WebRTC SFU als Rang-2-Hub für Media Relay, Recording, Multi-Operator (ADR-007/014) |
-| **WebRTC SFU** | Selective Forwarding Unit (Pion/Go) — Dumb Media Router with State Subscription (ADR-014) |
+| **Video Hub** | MediaMTX WHIP/WHEP Router als Rang-2-Hub für Live-Video Ingestion und Distribution (ADR-007/014/020) |
+| **WebRTC SFU** | Selective Forwarding Unit (Pion/Go) — bleibt als Session-Event-Consumer aktiv; Media-Routing durch MediaMTX (ADR-020) |
 | **Protobuf** | Protocol Buffers — Application Bus für Control/Safety/Telemetry (ADR-008) |
 | **CorrelationHeader** | Protobuf-Nachrichtenfeld in allen Schemas: session_id, event_id, vehicle_id, operator_id, timestamp (ADR-016) |
 | **ULID** | Universally Unique Lexicographically Sortable Identifier — Format der Session-IDs (zeitlich sortierbar) |
@@ -110,7 +110,7 @@ INVARIANT 3: Control Hub is Single Source of Truth for Session State.
 | Control | WebSocket (WSS + JWT), sync ACK | Bidirektionale Steuerung, <100ms | ADR-004/010/012b |
 | Telemetry | MQTT (Mosquitto), async | Fahrzeugstatus pub/sub | ADR-003/012b |
 | Safety | Safety Event Bus (Go, In-Memory), async | Safety-Events; DDS-Interface-kompatibel | ADR-002/012b |
-| Video | WebRTC SFU (Pion/Go) + coturn | Multi-Kamera, Adaptive Bitrate, NAT Traversal | ADR-014 |
+| Video | MediaMTX WHIP/WHEP + coturn | Live-Video (Larix→WHIP, Browser→WHEP), NAT Traversal | ADR-014/020 |
 | Message Format | Protobuf (Application Bus) | Control/Safety/Telemetry + CorrelationHeader | ADR-008/016 |
 | WebRTC Signaling | SDP/ICE (WebRTC Standard) | Media Layer — bewusst außerhalb Protobuf | ADR-014 |
 | Session Correlation | ULID (Vehicle-ID→Session-ID→Event-ID) | Systemweite Korrelation aller Kanäle | ADR-016 |
@@ -138,10 +138,13 @@ CONTROL HUB (Rang 1 — Safety Truth)
 
 VIDEO HUB (Rang 2 — Awareness only)
 ┌─────────────────────────────────┐
-│        WebRTC SFU (Pion)        │
-│  · Media Relay (Primary/Sec.)   │
-│  · Server-seitiges Recording    │
-│  · Multi-Operator Forwarding    │
+│   MediaMTX (WHIP/WHEP)          │
+│  · WHIP-Ingestion (Larix/5G)    │
+│  · WHEP-Egress (Browser)        │
+│  · Auth-Hook → Control Server   │
+│  · SAFE_MODE-Kick per API       │
+│                                 │
+│   WebRTC SFU (Pion/Go)          │
 │  · Session Event Consumer       │
 └───────────────┬─────────────────┘
                 │ NAT Traversal
@@ -176,7 +179,7 @@ JWT = Identity (Wer bist du?) ≠ Session-ID (In welchem Kontext?)
 | Message Format | Protobuf (Application Bus) | ADR-008 |
 | Protobuf Code-Gen | protoc-gen-es (TS) + protoc-gen-go, build-time | ADR-012b/013 |
 | MQTT Broker | Eclipse Mosquitto | ADR-003 |
-| Video | WebRTC SFU (Pion/Go) + coturn | ADR-014 |
+| Video | MediaMTX WHIP/WHEP + coturn | ADR-014/020 |
 | Authentifizierung | Separater Auth Service (JWT, Operator + Vehicle) | ADR-004 |
 | Session-ID | ULID, generiert vom Control Server (GSA) | ADR-016 |
 | Session Recording | Abstraktes Interface (Storage noch offen) | ADR-005 |

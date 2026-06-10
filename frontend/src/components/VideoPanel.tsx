@@ -3,6 +3,7 @@ import { useWebRTC } from '@/hooks/useWebRTC'
 interface Props {
   sessionId: string | null
   vehicleId: string
+  token: string | null
   enabled: boolean
 }
 
@@ -14,8 +15,8 @@ const MEDIA_BADGE: Record<string, string> = {
   MEDIA_FAILED:      'bg-red-600',
 }
 
-export function VideoPanel({ sessionId, vehicleId, enabled }: Props) {
-  const { videoRef, mediaState, connect } = useWebRTC(sessionId, vehicleId, enabled)
+export function VideoPanel({ sessionId, vehicleId, token, enabled }: Props) {
+  const { videoRef, mediaState, connect } = useWebRTC(sessionId, vehicleId, token, enabled)
   const badgeClass = MEDIA_BADGE[mediaState] ?? 'bg-gray-600'
 
   return (

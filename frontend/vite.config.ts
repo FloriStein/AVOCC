@@ -21,6 +21,7 @@ export default defineConfig({
       '/auth':       { target: 'http://localhost:8081', changeOrigin: true },
       '/sfu':        { target: 'http://localhost:8084', rewrite: (p) => p.replace(/^\/sfu/, ''), changeOrigin: true },
       '/telemetry':  { target: 'http://localhost:8083', changeOrigin: true },
+      '/whep':       { target: 'http://localhost:8889', rewrite: (p) => p.replace(/^\/whep/, ''), changeOrigin: true },
     },
   },
 })

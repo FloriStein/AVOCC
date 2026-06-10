@@ -8,7 +8,7 @@ import { ConnectionPanel } from '@/components/ConnectionPanel'
 import { VideoPanel } from '@/components/VideoPanel'
 import { ControlPanel } from '@/components/ControlPanel'
 
-const VEHICLE_ID = 'vehicle-1'
+const VEHICLE_ID = 'vehicle-001'
 
 const STATE_COLORS: Record<string, string> = {
   IDLE:          'bg-gray-500',
@@ -95,7 +95,7 @@ export default function App() {
       {/* Main Grid */}
       <main className="flex-1 grid grid-cols-3 grid-rows-2 gap-4 p-4 min-h-0">
         {/* Video Panel — 2 columns, 2 rows */}
-        <VideoPanel sessionId={session.sessionId} vehicleId={session.vehicleId} enabled={isConnected} />
+        <VideoPanel sessionId={session.sessionId} vehicleId={session.vehicleId} token={session.token} enabled={isConnected} />
 
         {/* Safety Panel */}
         <SafetyPanel
