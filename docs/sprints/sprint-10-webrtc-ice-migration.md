@@ -1,7 +1,7 @@
 # Sprint 10 — Browser WebRTC ICE Migration
 
-Stand: 2026-06-10
-Status: Deployed — E2E Smoke Test ausstehend (WHIP-Quelle benötigt)
+Stand: 2026-06-11
+Status: ✅ Abgeschlossen — E2E Smoke Test bestätigt (Browser WHIP → WHEP, HTTPS)
 
 ---
 
@@ -33,8 +33,12 @@ Ausschließlich Infrastructure-Fixes und ICE-Konfiguration. Keine neuen Features
 
 **Nicht in diesem Sprint:**
 - Multi-Vehicle-Routing (ADR-020-Backlog)
-- HTTPS / TLS-Terminierung (Backlog post-Sprint-8)
-- WHIP-Publish aus Browser (Larix bleibt Referenz-Publisher)
+
+**Nachträglich in Sprint 10 aufgenommen (Nachtrag 2026-06-11):**
+- HTTPS mit Self-Signed-Zertifikat (Voraussetzung für `getUserMedia` im Browser)
+- Browser WHIP-Sender (`useWHIPSender` + `StreamSenderPanel`) — Larix nicht mehr nötig
+- Recording-Komponente (`useMediaRecorder` + VideoPanel REC-Button)
+- ICE-Server-Validierung (`isValidIceServer` Filter)
 
 ---
 
@@ -319,12 +323,13 @@ bash ~/app/deploy.sh
 - [x] Alle 12 Services UP: control-server, frontend, auth, safety, telemetry, webrtc-sfu, mediamtx, stun-turn, mosquitto, loki, promtail, grafana
 - [x] WHEP Auth-Hook: 401 bei fehlendem Token/Session — verifiziert via `curl`
 - [x] Frontend: HTTP 200 von `http://18.196.24.10:3000/` — extern erreichbar
-- [x] 31/31 TypeScript Unit-Tests pass; Go Unit-Tests pass
-- [ ] Browser (WiFi): WHEP verbindet in <5s; `srflx`-Pair in `about:webrtc` — **ausstehend (WHIP-Quelle nötig)**
-- [ ] Browser (5G/LTE): WHEP verbindet via TURN-Relay; `relay`-Candidate in `about:webrtc` — **ausstehend**
-- [ ] `MEDIA_CONNECTED` State sichtbar im Operator-UI — **ausstehend**
-- [ ] DTLS kein Retransmit-Loop — **verifizierbar erst mit aktivem WHIP-Stream**
-- [ ] coturn logs: keine 401 nach TURN-Allocate — **verifizierbar erst bei Browser-Verbindung**
+- [x] 34/34 TypeScript Unit-Tests pass; Go Unit-Tests pass
+- [x] HTTPS erreichbar: `https://18.196.24.10/` — Self-Signed-Zertifikat (SAN=IP), Port 443 offen
+- [x] Browser WHIP-Sender: `StreamSenderPanel` → Status LIVE auf `vehicle-001` — verifiziert via nginx Log + MediaMTX Log
+- [x] `MEDIA_CONNECTED` State sichtbar im Operator-UI — ✓ bestätigt
+- [x] Video-Stream end-to-end: Browser StreamSenderPanel → MediaMTX → Browser VideoPanel — ✓ funktioniert
+- [x] coturn TURN-Allocations erfolgreich (rp>0, rb>0 in coturn logs) — ✓ verifiziert
+- [ ] Browser (5G/LTE) via TURN-Relay — noch nicht getestet (erfordert Mobilnetz)
 
 ---
 
@@ -389,19 +394,54 @@ Für lokale TURN-Tests: `.env` `TURN_EXTERNAL_IP` auf LAN-IP setzen.
 | Go Unit-Tests | alle pass ✓ |
 | TypeScript Unit-Tests | 31/31 pass ✓ |
 
-### Offen: E2E Smoke Test
+### E2E Smoke Test abgeschlossen — 2026-06-11
 
-Erfordert eine aktive WHIP-Quelle (z.B. Larix Broadcaster oder gstreamer WHIP-Client),
-die auf `http://18.196.24.10:8889/vehicle-001` published. Danach:
+**Ergebnis:** Video-Übertragung Browser → Browser funktioniert vollständig.
 
-```bash
-# Browser öffnen:
-http://18.196.24.10:3000/
+| Schritt | Ergebnis |
+|---------|---------|
+| `https://18.196.24.10/` laden, Self-Signed-Zertifikat akzeptieren | ✓ |
+| Login → CONNECTED | ✓ |
+| "⏺ Senden" → StreamSenderPanel öffnen → Stream-Key eingeben | ✓ |
+| Webcam/Bildschirm freigeben (`getUserMedia` auf HTTPS) | ✓ |
+| Stream-Status: LIVE auf `vehicle-001` | ✓ |
+| VideoPanel: MEDIA_NEGOTIATING → MEDIA_CONNECTED | ✓ |
+| Live-Video sichtbar im Operator-UI | ✓ |
 
-# Login → Session starten → Video-Panel beobachten
-# Erwarteter Status: MEDIA_NEGOTIATING → MEDIA_CONNECTED
+---
 
-# Chrome about:webrtc für ICE-Candidate-Typ prüfen:
-# WiFi → srflx-Pair erwartet
-# 5G   → relay-Pair erwartet (TURN)
-```
+## Sprint Nachtrag — 2026-06-11
+
+Zusätzliche Bugs und Features die während des E2E-Tests gefunden und behoben wurden.
+
+### Zusätzliche Bugs
+
+| # | Bug | Ursache | Fix |
+|---|-----|---------|-----|
+| B6 | `stun::3478` DOMException bei `new RTCPeerConnection()` | `TURN_EXTERNAL_IP` nicht in `control-server` environment in `docker-compose.yml` → `/api/ice-config` lieferte leere Hostnamen | `docker-compose.yml`: `TURN_EXTERNAL_IP`, `TURN_USER`, `TURN_PASSWORD` zu control-server environment hinzugefügt |
+| B7 | nginx `/whip/` Location fehlte im Produktions-Image | Frontend-Image auf EC2 war aus einem Stand gebaut bevor der `/whip/`-Block zu `nginx.conf` hinzugefügt wurde | Frontend-Image mit `--no-cache` neu gebaut und gepusht |
+| B8 | `getUserMedia` / `getDisplayMedia` im Browser blockiert | Browser-Sicherheitsrichtlinie: `navigator.mediaDevices` nur auf Secure Contexts (HTTPS oder localhost) verfügbar; EC2 war nur HTTP | HTTPS mit Self-Signed-Zertifikat implementiert (nginx port 443, deploy.sh openssl, Security Group port 443) |
+| B9 | WHIP-Publish → HTTP 401 | Browser sendete EC2 WHIP-Key (`hDZj/...`) auf lokalem Stack; lokal ist `WHIP_STREAM_KEY=dev-stream-key-change-in-production` | Nutzer dokumentiert: lokaler Key ≠ EC2-Key |
+| B10 | `docker-compose.prod.yml` + `deploy.sh` auf EC2 nicht aktuell | `deploy.sh` pullt nur Docker-Images, kopiert aber nicht die Compose-Datei | Dateien via SCP nach EC2 hochgeladen; deploy.sh-Prozess dokumentiert |
+
+### Neue Features (Nachtrag)
+
+| Feature | Dateien | Status |
+|---------|---------|--------|
+| **Recording-Komponente** — `useMediaRecorder` Hook + VideoPanel REC-Button + Stop + Dauer | `frontend/src/hooks/useMediaRecorder.ts`, `VideoPanel.tsx`, `VideoPanel.test.tsx` | ✓ 34/34 Tests |
+| **Browser WHIP-Sender** — `useWHIPSender` Hook + `StreamSenderPanel` | `frontend/src/hooks/useWHIPSender.ts`, `components/StreamSenderPanel.tsx`, `App.tsx` | ✓ E2E verifiziert |
+| **HTTPS Self-Signed** — nginx port 443, `deploy.sh` openssl, Security Group | `nginx.conf`, `docker-compose.prod.yml`, `scripts/deploy.sh` | ✓ `https://18.196.24.10/` erreichbar |
+| **ICE-Server-Validierung** — `isValidIceServer()` filtert leere Hostnamen | `useWebRTC.ts`, `useWHIPSender.ts` | ✓ |
+| **CDK aktualisiert** — Port 80 entfernt, Port 443 IPv6 hinzugefügt | `infrastructure/AWS/cdk_server-stack.ts` | ✓ |
+
+### Verifizierte Endpoints (2026-06-11)
+
+| Endpoint | Ergebnis |
+|----------|---------|
+| `https://18.196.24.10/` | HTTP 200 ✓ |
+| `https://18.196.24.10/api/ice-config` | JSON STUN+TURN mit IP `18.196.24.10` ✓ |
+| `POST https://18.196.24.10/whip/vehicle-001/whip` (falscher Key) | HTTP 401 ✓ |
+| `POST https://18.196.24.10/whip/vehicle-001/whip` (richtiger Key) | HTTP 201 + SDP-Answer ✓ |
+| `POST https://18.196.24.10/whep/vehicle-001/whep` (JWT) | HTTP 200 + SDP-Answer ✓ |
+| Video-Stream End-to-End (Browser → MediaMTX → Browser) | ✓ MEDIA_CONNECTED |
+| TypeScript Unit-Tests | 34/34 ✓ |

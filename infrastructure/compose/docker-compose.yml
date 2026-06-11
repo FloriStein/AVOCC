@@ -33,6 +33,9 @@ services:
       LOG_LEVEL: "info"
       WHIP_STREAM_KEY: ${WHIP_STREAM_KEY:-dev-stream-key-change-in-production}
       MEDIAMTX_API_URL: "http://mediamtx:9997"
+      TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:-127.0.0.1}
+      TURN_USER: ${TURN_USER:-avoc}
+      TURN_PASSWORD: ${TURN_PASSWORD:-changeme}
     volumes:
       - audit-data:/data/audit
     depends_on:

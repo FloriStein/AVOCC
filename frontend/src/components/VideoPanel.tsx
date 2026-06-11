@@ -1,4 +1,5 @@
 import { useWebRTC } from '@/hooks/useWebRTC'
+import { useMediaRecorder } from '@/hooks/useMediaRecorder'
 
 interface Props {
   sessionId: string | null
@@ -16,8 +17,10 @@ const MEDIA_BADGE: Record<string, string> = {
 }
 
 export function VideoPanel({ sessionId, vehicleId, token, enabled }: Props) {
-  const { videoRef, mediaState, connect } = useWebRTC(sessionId, vehicleId, token, enabled)
+  const { videoRef, streamRef, mediaState, connect } = useWebRTC(sessionId, vehicleId, token, enabled)
+  const { isRecording, duration, start, stop } = useMediaRecorder(streamRef)
   const badgeClass = MEDIA_BADGE[mediaState] ?? 'bg-gray-600'
+  const canRecord = mediaState === 'MEDIA_CONNECTED'
 
   return (
     <section className="col-span-2 row-span-2 bg-black rounded-lg border border-gray-700 relative overflow-hidden flex items-center justify-center">
@@ -30,7 +33,35 @@ export function VideoPanel({ sessionId, vehicleId, token, enabled }: Props) {
         muted
       />
 
-      {/* MEDIA STATE badge */}
+      {/* Top-left: recording controls */}
+      {canRecord && (
+        <div className="absolute top-2 left-2 flex items-center gap-2">
+          {isRecording ? (
+            <>
+              <span className="flex items-center gap-1 bg-black/60 text-red-400 text-xs font-mono px-2 py-1 rounded">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse inline-block" />
+                REC {duration}
+              </span>
+              <button
+                onClick={stop}
+                className="bg-red-700 hover:bg-red-600 text-white text-xs font-semibold px-2 py-1 rounded transition-colors"
+              >
+                Stop
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={start}
+              className="flex items-center gap-1 bg-black/60 hover:bg-black/80 text-white text-xs font-semibold px-2 py-1 rounded transition-colors"
+            >
+              <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
+              REC
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Top-right: MEDIA STATE badge */}
       <div className="absolute top-2 right-2">
         <span className={`${badgeClass} text-white text-xs font-mono px-2 py-1 rounded`}>
           {mediaState}

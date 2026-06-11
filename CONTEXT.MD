@@ -110,7 +110,7 @@ INVARIANT 3: Control Hub is Single Source of Truth for Session State.
 | Control | WebSocket (WSS + JWT), sync ACK | Bidirektionale Steuerung, <100ms | ADR-004/010/012b |
 | Telemetry | MQTT (Mosquitto), async | Fahrzeugstatus pub/sub | ADR-003/012b |
 | Safety | Safety Event Bus (Go, In-Memory), async | Safety-Events; DDS-Interface-kompatibel | ADR-002/012b |
-| Video | MediaMTX WHIP/WHEP + coturn | Live-Video (Larix→WHIP, Browser→WHEP), NAT Traversal | ADR-014/020 |
+| Video | MediaMTX WHIP/WHEP + coturn | Live-Video (Browser/Larix→WHIP, Browser→WHEP), HTTPS-Pflicht für getUserMedia, NAT Traversal | ADR-014/020 |
 | Message Format | Protobuf (Application Bus) | Control/Safety/Telemetry + CorrelationHeader | ADR-008/016 |
 | WebRTC Signaling | SDP/ICE (WebRTC Standard) | Media Layer — bewusst außerhalb Protobuf | ADR-014 |
 | Session Correlation | ULID (Vehicle-ID→Session-ID→Event-ID) | Systemweite Korrelation aller Kanäle | ADR-016 |

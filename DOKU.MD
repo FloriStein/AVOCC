@@ -228,7 +228,8 @@ Das Herzstück des Systems. Verantwortlich für:
 ### MediaMTX
 
 - WHIP/WHEP Router für Live-Video (ADR-020)
-- Larix Broadcaster → WHIP; Operator-Browser → WHEP
+- WHIP-Ingestion: Browser `StreamSenderPanel` (primär) oder Larix Broadcaster (alternativ)
+- WHEP-Egress: Operator-Browser (`VideoPanel`, `useWebRTC.ts`)
 - Auth-Hook → Control Server (`POST /internal/media/auth`)
 - SAFE_MODE: Control Server kickt alle aktiven Subscriber via Management API
 - NAT-Traversal via coturn (STUN/TURN) — ICE-Gathering im Browser via `/api/ice-config`
@@ -241,7 +242,8 @@ React 18 + TypeScript SPA. Operatoren-Dashboard mit:
 
 | Komponente | Funktion |
 |------------|----------|
-| `VideoPanel` | WebRTC Live-Video, MEDIA STATE Badge |
+| `VideoPanel` | WebRTC Live-Video (WHEP), MEDIA STATE Badge |
+| `StreamSenderPanel` | Browser WHIP Sender — Camera/Screen → MediaMTX (HTTPS-Pflicht) |
 | `ControlPanel` | WASD/Joystick/Gamepad, 20 Hz Command Loop |
 | `SafetyPanel` | Emergency Stop, Dead-man Switch (Spacebar) |
 | `ConnectionPanel` | SYSTEM STATE, Latenz, Session-ID, Telemetrie |
@@ -1330,4 +1332,4 @@ func TestSafety_InvalidTransitionRejected(t *testing.T) {
 
 ---
 
-*Stand: Sprint 10 deployed ✅ | 10 Sprints · 76 Tasks · 20 ADRs | E2E Smoke Test (WHIP-Quelle) ausstehend (2026-06-10)*
+*Stand: Sprint 10 abgeschlossen ✅ | 10 Sprints · 78 Tasks · 20 ADRs | E2E Smoke Test (Browser WHIP → WHEP, HTTPS) bestätigt · 5G TURN-Relay ausstehend (2026-06-11)*

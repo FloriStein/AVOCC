@@ -9,20 +9,30 @@ export type MediaState =
   | 'MEDIA_DEGRADED'
   | 'MEDIA_FAILED'
 
+function isValidIceServer(s: RTCIceServer): boolean {
+  const urls = Array.isArray(s.urls) ? s.urls : [s.urls]
+  // Reject entries where the URL contains an empty host (e.g. "stun::3478" when TURN_EXTERNAL_IP is unset)
+  return urls.every(u => !/^(stun|turn):(?::|\?)/.test(u))
+}
+
 async function fetchIceServers(): Promise<RTCIceServer[]> {
   try {
     const res = await fetch('/api/ice-config')
     if (!res.ok) throw new Error(`ice-config ${res.status}`)
     const { iceServers } = await res.json()
-    return iceServers
+    const valid = (iceServers as RTCIceServer[]).filter(isValidIceServer)
+    if (valid.length > 0) return valid
+    throw new Error('no valid ICE servers in response')
   } catch {
     // Fallback: STUN only — works on non-CGNAT networks (WiFi/DSL)
-    return [{ urls: `stun:${window.location.hostname}:3478` }]
+    const host = window.location.hostname || '127.0.0.1'
+    return [{ urls: `stun:${host}:3478` }]
   }
 }
 
 export function useWebRTC(sessionId: string | null, vehicleId: string, token: string | null, enabled: boolean) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
   const [mediaState, setMediaState] = useState<MediaState>('MEDIA_INIT')
   const pcRef = useRef<RTCPeerConnection | null>(null)
 
@@ -39,6 +49,7 @@ export function useWebRTC(sessionId: string | null, vehicleId: string, token: st
       pcRef.current = null
     }
     if (videoRef.current) videoRef.current.srcObject = null
+    streamRef.current = null
     setMediaState('MEDIA_INIT')
   }, [])
 
@@ -56,6 +67,7 @@ export function useWebRTC(sessionId: string | null, vehicleId: string, token: st
     pc.ontrack = (event) => {
       if (videoRef.current && event.streams.length > 0) {
         videoRef.current.srcObject = event.streams[0]
+        streamRef.current = event.streams[0]
         updateState('MEDIA_CONNECTED')
       }
     }
@@ -118,5 +130,5 @@ export function useWebRTC(sessionId: string | null, vehicleId: string, token: st
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, sessionId, vehicleId, token])
 
-  return { videoRef, mediaState, connect, disconnect }
+  return { videoRef, streamRef, mediaState, connect, disconnect }
 }

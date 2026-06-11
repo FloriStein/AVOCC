@@ -85,6 +85,25 @@ echo "  TURN_REALM          ${TURN_REALM}"
 echo "  REGISTRY            ${REGISTRY}"
 echo "  VERSION             ${VERSION}"
 
+# ─── Self-Signed SSL-Zertifikat (für getUserMedia auf HTTPS) ──────────────────
+# Browser blockiert getUserMedia auf HTTP — HTTPS mit self-signed cert umgeht das.
+# Einmalig generieren; bei erneutem Deploy wird es wiederverwendet.
+
+SSL_DIR="$APP_DIR/ssl"
+mkdir -p "$SSL_DIR"
+if [ ! -f "$SSL_DIR/cert.pem" ]; then
+  echo "Generiere Self-Signed SSL-Zertifikat für $TURN_EXTERNAL_IP..."
+  openssl req -x509 -newkey rsa:2048 \
+    -keyout "$SSL_DIR/key.pem" \
+    -out    "$SSL_DIR/cert.pem" \
+    -days 365 -nodes \
+    -subj "/CN=${TURN_EXTERNAL_IP}" \
+    -addext "subjectAltName=IP:${TURN_EXTERNAL_IP}" 2>/dev/null
+  echo "  Zertifikat erstellt: $SSL_DIR/cert.pem"
+else
+  echo "  SSL-Zertifikat vorhanden: $SSL_DIR/cert.pem"
+fi
+
 # ─── Docker Hub Login ─────────────────────────────────────────────────────────
 
 echo ""

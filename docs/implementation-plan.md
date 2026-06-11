@@ -1,13 +1,13 @@
 # Implementation Plan — Teleoperation System
 
-Stand: 2026-06-10
-Status: Phase 1–10 abgeschlossen ✅ · Sprint 10 deployed · 76 Tasks · 20 ADRs · E2E Smoke Test ausstehend
+Stand: 2026-06-11
+Status: Phase 1–10 abgeschlossen ✅ · Sprint 10 deployed · 78 Tasks · 20 ADRs · E2E Smoke Test bestätigt (Browser WHIP → WHEP, HTTPS)
 
 ---
 
 ## 1. Executive Summary
 
-Wir bauen ein sicheres, modulares Echtzeit-Teleoperation-System zur Fernsteuerung von Fahrzeugen über das offene Internet (Vehicle ↔ Internet ↔ OCC, uncontrolled routing). Die Architektur ist durch 20 ADRs entschieden. Nach 10 Sprints (76 Tasks) ist das System vollständig implementiert und auf AWS EC2 deployed: Frontend, Backend, Video-Channel (MediaMTX WHIP/WHEP, ADR-020), Test-Infrastruktur, Logging (ADR-017/018) und Browser-ICE-Migration (Sprint 10, STUN+TURN via `/api/ice-config`).
+Wir bauen ein sicheres, modulares Echtzeit-Teleoperation-System zur Fernsteuerung von Fahrzeugen über das offene Internet (Vehicle ↔ Internet ↔ OCC, uncontrolled routing). Die Architektur ist durch 20 ADRs entschieden. Nach 10 Sprints (78 Tasks) ist das System vollständig implementiert und auf AWS EC2 deployed: Frontend, Backend, Video-Channel (MediaMTX WHIP/WHEP, ADR-020), Test-Infrastruktur, Logging (ADR-017/018), Browser-ICE-Migration (Sprint 10, STUN+TURN via `/api/ice-config`), HTTPS mit Self-Signed Cert und Browser-WHIP-Sender.
 
 **Nicht-Verhandelbar:**
 - Safety First — SAFE MODE ist nicht überbrückbar, Video darf SAFE MODE nie triggern
@@ -392,7 +392,7 @@ Control Server als einzige Auth- und SAFE_MODE-Kontrollinstanz über MediaMTX.
 ## 9. Vollständige Task-Übersicht
 
 ```
-76 Tasks gesamt / 10 Epics — Phase 1–10 abgeschlossen ✅
+78 Tasks gesamt / 10 Epics — Phase 1–10 abgeschlossen ✅
 
 Phase 1  ✅ (Sprint 1):  INFRA-01, FE-01, BE-01, BE-02, BE-03, BE-11, DC-01, DC-02, DC-03
 Phase 2  ✅:             BE-06, BE-09, BE-10, BE-12, TEST-01, TEST-02
@@ -403,16 +403,17 @@ Phase 6  ✅:             TEST-03, TEST-04, TEST-05, DC-04
 Phase 7  ✅:             LOG-01..11
 Phase 8  ✅ (Sprint 8):  DEPLOY-01..07
 Phase 9  ✅ (Sprint 9):  STREAM-01..09
-Phase 10 ✅ (Sprint 10): WEBRTC-01..09 (E2E Smoke Test mit WHIP-Quelle ausstehend)
+Phase 10 ✅ (Sprint 10): WEBRTC-01..11 (E2E Smoke Test Browser WHIP → WHEP bestätigt)
 ```
 
 ---
 
-### Phase 10 — Browser WebRTC ICE Migration ✅ *(Sprint 10, deployed 2026-06-10)*
+### Phase 10 — Browser WebRTC ICE Migration + HTTPS + Browser WHIP Sender ✅ *(Sprint 10, abgeschlossen 2026-06-11)*
 
 **Ziel:** WHEP-basierter Browser-Videoempfang zuverlässig auf allen Netzwerken (WiFi + 5G/LTE).
 Drei Root Causes aus Sprint-9-Debugging behoben: Candidate Explosion, srflx auf gesperrten Ports,
-Pion DTLS-Client-Bug. Referenz: [`docs/sprints/sprint-10-webrtc-ice-migration.md`](sprints/sprint-10-webrtc-ice-migration.md)
+Pion DTLS-Client-Bug. Sprint-Nachtrag: HTTPS (getUserMedia-Voraussetzung) und Browser-WHIP-Sender.
+Referenz: [`docs/sprints/sprint-10-webrtc-ice-migration.md`](sprints/sprint-10-webrtc-ice-migration.md)
 
 | ID | Task | Typ | Abhängigkeiten |
 |----|------|-----|----------------|
@@ -421,10 +422,12 @@ Pion DTLS-Client-Bug. Referenz: [`docs/sprints/sprint-10-webrtc-ice-migration.md
 | WEBRTC-03 | `docker-compose.prod.yml`: coturn `network_mode: host`, `relay-ip`, `external-ip=PUBLIC/PRIVATE` | M | WEBRTC-01 |
 | WEBRTC-04 | `docker-compose.prod.yml`: mediamtx UDP 8889 → 8189 | S | WEBRTC-02 |
 | WEBRTC-05 | `deploy.sh`: `TURN_PRIVATE_IP` aus EC2-Instance-Metadata | S | WEBRTC-03 |
-| WEBRTC-06 | control-server: `GET /api/ice-config` — TURN-Credentials für Browser | M | — |
+| WEBRTC-06 | control-server: `GET /ice-config` — TURN-Credentials für Browser (nginx strippt `/api/` Präfix) | M | — |
 | WEBRTC-07 | `docker-compose.prod.yml`: control-server `TURN_USER` + `TURN_PASSWORD` env | S | WEBRTC-06 |
-| WEBRTC-08 | `useWebRTC.ts`: DTLS-Fix, TURN ICE-Server (UDP+TCP, Port 3478), ice-config fetch | M | WEBRTC-06 |
-| WEBRTC-09 | `cdk deploy` + `deploy.sh` + E2E Smoke Test (WiFi + 5G) | M | WEBRTC-01–08 |
+| WEBRTC-08 | `useWebRTC.ts` + `useWHIPSender.ts`: DTLS-Fix, TURN ICE-Server, `isValidIceServer()` Filter | M | WEBRTC-06 |
+| WEBRTC-09 | `cdk deploy` + `deploy.sh` + E2E Smoke Test (WiFi) | M | WEBRTC-01–08 |
+| WEBRTC-10 | HTTPS: nginx `listen 443 ssl`, Self-Signed Cert via `deploy.sh` (openssl), CDK Port 443 IPv4+IPv6 | M | — |
+| WEBRTC-11 | Browser WHIP Sender: `StreamSenderPanel.tsx` + `useWHIPSender.ts` (getUserMedia, HTTPS-Pflicht) | M | WEBRTC-10 |
 
 ---
 
@@ -437,9 +440,8 @@ Pion DTLS-Client-Bug. Referenz: [`docs/sprints/sprint-10-webrtc-ice-migration.md
 | DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
 | Backup-Strategie Audit Store (SQLite Volume → S3) | offen | ADR-018 Folge — S3-Bucket im CDK vorhanden |
 | Migration zu AWS ECR | offen | ADR-019 Folge — für Produktivbetrieb |
-| HTTPS / TLS-Terminierung auf EC2 | offen | ADR-019 Folge — für Testphase HTTP akzeptabel |
 | MQTT-Authentifizierung (Mosquitto Passwort-File) | offen | Port 1883 aktuell ohne Auth offen |
-| E2E Smoke Test (Browser WiFi + 5G TURN-Relay) | offen | WEBRTC-09 Rest — WHIP-Quelle (Larix) nötig |
+| E2E Smoke Test (5G TURN-Relay) | offen | WEBRTC-09 — Browser WHIP E2E (WiFi) bestätigt; TURN-Relay auf 5G/LTE noch ausstehend |
 
 ---
 

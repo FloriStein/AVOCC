@@ -14,6 +14,9 @@ services:
     image: ${REGISTRY}/avoc-frontend:${VERSION}
     ports:
       - "3000:80"
+      - "443:443"    # HTTPS — Self-signed cert aus ./ssl/ (via deploy.sh generiert)
+    volumes:
+      - ./ssl:/etc/nginx/ssl:ro
     depends_on:
       - control-server
     networks:
