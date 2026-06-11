@@ -66,13 +66,17 @@ func main() {
 		WithAuditWriter(auditWriter)
 	handoverMgr := session.NewHandoverManager(sm, sessionMgr, authURL)
 	recorder := recording.NewMemoryRecorder()
+	vehicleRegistry := vehicleconnection.NewRegistry()
+	vehicleAckStore := vehicleconnection.NewAckStore()
+
 	cmdEngine := command.NewEngine(sm, safetyPub, sessionMgr, deadman).
-		WithAuditWriter(auditWriter)
+		WithAuditWriter(auditWriter).
+		WithVehicleForwarder(vehicleRegistry)
 
 	// --- Handlers ---
 	wsHandler := transport.NewWSHandler(secret, sm, sessionMgr, deadman, ackWatcher, cmdEngine).
 		WithAuditWriter(auditWriter)
-	vehicleHandler := vehicleconnection.NewHandler(secret, sm, safetyPub)
+	vehicleHandler := vehicleconnection.NewHandler(secret, sm, safetyPub, vehicleRegistry, vehicleAckStore)
 
 	// --- Routes ---
 	mux := http.NewServeMux()
@@ -303,6 +307,28 @@ func main() {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
+	})
+
+	// VEH-07 (ADR-021): Latest VehicleCommandAck per vehicle — polled by frontend
+	mux.HandleFunc("GET /vehicle/ack/latest/", func(w http.ResponseWriter, r *http.Request) {
+		vehicleID := strings.TrimPrefix(r.URL.Path, "/vehicle/ack/latest/")
+		if vehicleID == "" {
+			http.Error(w, "vehicle_id required", http.StatusBadRequest)
+			return
+		}
+		ack, ok := vehicleAckStore.Latest(vehicleID)
+		if !ok {
+			http.Error(w, "no ack for vehicle", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"vehicle_id":        vehicleID,
+			"command_event_id":  ack.CommandEventId,
+			"received":          ack.Received,
+			"received_at_ms":    ack.ReceivedAtMs,
+			"vehicle_connected": vehicleRegistry.Connected(vehicleID),
+		})
 	})
 
 	// State + Health

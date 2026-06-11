@@ -196,6 +196,21 @@ services:
       - avoc-net
     restart: unless-stopped
 
+  # ─── Vehicle Mock — simuliert Raspberry Pi (ADR-021) ──────────────────────
+  vehicle-mock:
+    image: ${REGISTRY}/avoc-vehicle-mock:${VERSION}
+    environment:
+      VEHICLE_ID: "vehicle-001"
+      CONTROL_SERVER_URL: "ws://control-server:8080/vehicle/ws"
+      JWT_SECRET: ${JWT_SECRET}
+      MQTT_BROKER: "mosquitto:1883"
+    depends_on:
+      - control-server
+      - mosquitto
+    networks:
+      - avoc-net
+    restart: unless-stopped
+
 networks:
   avoc-net:
     driver: bridge

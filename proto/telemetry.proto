@@ -8,11 +8,18 @@ option go_package = "avoc/gen/go/telemetry/v1;telemetryv1";
 
 // TelemetryEvent is published via MQTT (async, fire-and-forget).
 // A MQTT disconnect triggers DEGRADED — not SAFE_MODE (ADR-009).
+// Fields 7–11 added in ADR-021: vehicle actuation feedback.
 message TelemetryEvent {
-  avoc.common.v1.CorrelationHeader header      = 1;
-  double                            speed_kmh   = 2;
-  double                            battery_pct = 3;
-  double                            latitude    = 4;
-  double                            longitude   = 5;
-  string                            status      = 6;
+  avoc.common.v1.CorrelationHeader header             = 1;
+  double                            speed_kmh          = 2;
+  double                            battery_pct        = 3;
+  double                            latitude           = 4;
+  double                            longitude          = 5;
+  string                            status             = 6;
+  // Actuation feedback (ADR-021) — published by vehicle after executing a command.
+  double                            steer_commanded    = 7;   // [-1.0, 1.0]
+  double                            throttle_commanded = 8;   // [-1.0, 1.0]
+  double                            brake_commanded    = 9;   // [0.0, 1.0]
+  double                            steer_actual       = 10;  // measured actuator position
+  double                            throttle_actual    = 11;  // measured actuator position
 }

@@ -1,13 +1,13 @@
 # Implementation Plan — Teleoperation System
 
 Stand: 2026-06-11
-Status: Phase 1–10 abgeschlossen ✅ · Sprint 10 deployed · 78 Tasks · 20 ADRs · E2E Smoke Test bestätigt (Browser WHIP → WHEP, HTTPS)
+Status: Phase 1–11 abgeschlossen ✅ · Sprint 11 abgeschlossen · 90 Tasks · 21 ADRs · Go Build + 26 Unit Tests + 41 Frontend Tests grün
 
 ---
 
 ## 1. Executive Summary
 
-Wir bauen ein sicheres, modulares Echtzeit-Teleoperation-System zur Fernsteuerung von Fahrzeugen über das offene Internet (Vehicle ↔ Internet ↔ OCC, uncontrolled routing). Die Architektur ist durch 20 ADRs entschieden. Nach 10 Sprints (78 Tasks) ist das System vollständig implementiert und auf AWS EC2 deployed: Frontend, Backend, Video-Channel (MediaMTX WHIP/WHEP, ADR-020), Test-Infrastruktur, Logging (ADR-017/018), Browser-ICE-Migration (Sprint 10, STUN+TURN via `/api/ice-config`), HTTPS mit Self-Signed Cert und Browser-WHIP-Sender.
+Wir bauen ein sicheres, modulares Echtzeit-Teleoperation-System zur Fernsteuerung von Fahrzeugen über das offene Internet (Vehicle ↔ Internet ↔ OCC, uncontrolled routing). Die Architektur ist durch 21 ADRs entschieden. Nach 11 Sprints (90 Tasks) ist das System vollständig implementiert: Frontend, Backend, Video-Channel (MediaMTX WHIP/WHEP, ADR-020), Test-Infrastruktur, Logging (ADR-017/018), Browser-ICE-Migration (Sprint 10), HTTPS und Browser-WHIP-Sender, sowie Vehicle Connectivity & Feedback (Sprint 11, ADR-021): Steuerbefehle werden per WebSocket an das Fahrzeug weitergeleitet, VehicleCommandAck bestätigt den Transport, TelemetryEvent enthält Aktuator-Ist-Werte, InputIndicatorPanel visualisiert sie im Frontend.
 
 **Nicht-Verhandelbar:**
 - Safety First — SAFE MODE ist nicht überbrückbar, Video darf SAFE MODE nie triggern
@@ -204,9 +204,10 @@ Session-ID überlebt SAFE_MODE als Root-Referenz. Recovery = neue Execution Bran
 proto/
 ├── common.proto      → CorrelationHeader (shared — ADR-016)
 ├── control.proto     → Control Commands + ControlAck (WebSocket, Protobuf)
-├── telemetry.proto   → Telemetry Events (MQTT, Protobuf)
+├── telemetry.proto   → Telemetry Events incl. Actuation Fields (MQTT, Protobuf)
 ├── safety.proto      → Safety Events (Safety Bus, Protobuf)
-└── session.proto     → Session Events (SFU Push) + RecordingEntry (Protobuf)
+├── session.proto     → Session Events (SFU Push) + RecordingEntry (Protobuf)
+└── vehicle.proto     → VehicleCommandAck (Vehicle WebSocket, Protobuf — ADR-021)
 ```
 
 WebRTC Signaling (SDP/ICE) ist **bewusst außerhalb** des Protobuf-Schemas — standardisiertes Media Layer Protokoll.
@@ -392,7 +393,7 @@ Control Server als einzige Auth- und SAFE_MODE-Kontrollinstanz über MediaMTX.
 ## 9. Vollständige Task-Übersicht
 
 ```
-78 Tasks gesamt / 10 Epics — Phase 1–10 abgeschlossen ✅
+90 Tasks gesamt / 11 Epics — Phase 1–11 abgeschlossen ✅
 
 Phase 1  ✅ (Sprint 1):  INFRA-01, FE-01, BE-01, BE-02, BE-03, BE-11, DC-01, DC-02, DC-03
 Phase 2  ✅:             BE-06, BE-09, BE-10, BE-12, TEST-01, TEST-02
@@ -404,6 +405,7 @@ Phase 7  ✅:             LOG-01..11
 Phase 8  ✅ (Sprint 8):  DEPLOY-01..07
 Phase 9  ✅ (Sprint 9):  STREAM-01..09
 Phase 10 ✅ (Sprint 10): WEBRTC-01..11 (E2E Smoke Test Browser WHIP → WHEP bestätigt)
+Phase 11 ✅ (Sprint 11): VEH-01..12 (Go Build + 26 Unit Tests + 41 Frontend Tests grün)
 ```
 
 ---
@@ -429,6 +431,26 @@ Referenz: [`docs/sprints/sprint-10-webrtc-ice-migration.md`](sprints/sprint-10-w
 | WEBRTC-10 | HTTPS: nginx `listen 443 ssl`, Self-Signed Cert via `deploy.sh` (openssl), CDK Port 443 IPv4+IPv6 | M | — |
 | WEBRTC-11 | Browser WHIP Sender: `StreamSenderPanel.tsx` + `useWHIPSender.ts` (getUserMedia, HTTPS-Pflicht) | M | WEBRTC-10 |
 
+### Phase 11 — Vehicle Connectivity & Feedback (ADR-021) ✅ *(Sprint 11, abgeschlossen 2026-06-11)*
+
+**Ziel:** Steuerbefehle kommen tatsächlich beim Fahrzeug an. Operator sieht Aktuator-Ist-Werte, nicht was er eingibt.
+Referenz: [`docs/sprints/sprint-11-vehicle-connectivity.md`](sprints/sprint-11-vehicle-connectivity.md)
+
+| ID | Task | Typ | Abhängigkeiten |
+|----|------|-----|----------------|
+| VEH-01 | ADR-021 — Vehicle Connectivity & Feedback Architecture | L | — |
+| VEH-02 | `proto/vehicle.proto` — VehicleCommandAck Message | S | INFRA-01 |
+| VEH-03 | `proto/telemetry.proto` — Actuation Fields 7–11 (steer/throttle/brake commanded+actual) | S | INFRA-01 |
+| VEH-04 | `internal/vehicleconnection/registry.go` — Registry + ForwardCommand (VehicleForwarder impl) | M | VEH-02 |
+| VEH-05 | `internal/vehicleconnection/ackstore.go` — AckStore (Latest-ACK je vehicleID) | S | VEH-02 |
+| VEH-06 | `internal/controlserver/command/engine.go` — VehicleForwarder Interface + WithVehicleForwarder() | M | VEH-04 |
+| VEH-07 | `cmd/control-server/main.go` — Registry/AckStore verdrahtet + `GET /vehicle/ack/latest/` | M | VEH-04, VEH-05 |
+| VEH-08 | `cmd/vehicle-mock/main.go` — JWT self-gen, WS connect, Protobuf decode, ACK send, MQTT lerp | L | VEH-02, VEH-03 |
+| VEH-09 | `vehicle-mock.Dockerfile` + Compose + nginx `/vehicle/` Proxy | M | VEH-08 |
+| VEH-10 | `useVehicleAck.ts` — Hook, pollt `/vehicle/ack/latest/` 500ms | S | VEH-07 |
+| VEH-11 | `InputIndicatorPanel.tsx` — SteeringWheel SVG + ActuationBar + AckBadge | M | VEH-10, VEH-03 |
+| VEH-12 | Tests: `vehicleconnection_test.go` (7) + `InputIndicatorPanel.test.tsx` (7) | M | VEH-04, VEH-05, VEH-11 |
+
 ---
 
 ## 10. Offene Folge-Entscheidungen
@@ -445,7 +467,7 @@ Referenz: [`docs/sprints/sprint-10-webrtc-ice-migration.md`](sprints/sprint-10-w
 
 ---
 
-## 11. ADR-Index (20 ADRs)
+## 11. ADR-Index (21 ADRs)
 
 | ADR | Titel | Entscheidung |
 |-----|-------|-------------|
@@ -470,3 +492,4 @@ Referenz: [`docs/sprints/sprint-10-webrtc-ice-migration.md`](sprints/sprint-10-w
 | [ADR-018](adr/018-audit-trail-strategy.md) | Audit Trail Strategy | SQLite WAL als AuditWriter; fsync vor SAFE_MODE; garantierte Safety-Event-Persistenz; kein extra Service |
 | [ADR-019](adr/019-deployment-strategy.md) | Deployment-Strategie | Docker Hub private Repos + EC2 Elastic IP + AWS SSM Parameter Store; linux/amd64; kein Quellcode auf EC2 |
 | [ADR-020](adr/020-mediamtx-whip-whep.md) | Video Ingestion & Distribution | MediaMTX WHIP/WHEP; Larix→WHIP; Browser→WHEP; Control Server = einzige Auth-Instanz; Browser-ICE-Gathering via `/api/ice-config` |
+| [ADR-021](adr/021-vehicle-connectivity-feedback.md) | Vehicle Connectivity & Feedback | JWT sub=vehicleID; Protobuf end-to-end; WebSocket ACK (Transport) + MQTT Telemetrie (Aktuator-Ist-Werte); vehicle-mock Docker-Service |

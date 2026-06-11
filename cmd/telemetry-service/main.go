@@ -43,14 +43,19 @@ func main() {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"vehicle_id":  event.Header.GetVehicleId(),
-			"session_id":  event.Header.GetSessionId(),
-			"speed_kmh":   event.SpeedKmh,
-			"battery_pct": event.BatteryPct,
-			"latitude":    event.Latitude,
-			"longitude":   event.Longitude,
-			"status":      event.Status,
-			"timestamp":   event.Header.GetTimestamp(),
+			"vehicle_id":         event.Header.GetVehicleId(),
+			"session_id":         event.Header.GetSessionId(),
+			"speed_kmh":          event.SpeedKmh,
+			"battery_pct":        event.BatteryPct,
+			"latitude":           event.Latitude,
+			"longitude":          event.Longitude,
+			"status":             event.Status,
+			"timestamp":          event.Header.GetTimestamp(),
+			"steer_commanded":    event.SteerCommanded,
+			"throttle_commanded": event.ThrottleCommanded,
+			"brake_commanded":    event.BrakeCommanded,
+			"steer_actual":       event.SteerActual,
+			"throttle_actual":    event.ThrottleActual,
 		})
 	})
 

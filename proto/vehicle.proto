@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package avoc.vehicle.v1;
+
+import "common.proto";
+
+option go_package = "avoc/gen/go/vehicle/v1;vehiclev1";
+
+// VehicleCommandAck is sent from the vehicle back to the Control Server
+// over the Vehicle WebSocket after receiving a ControlCommand (ADR-021).
+// Confirms transport-level receipt — not execution.
+message VehicleCommandAck {
+  avoc.common.v1.CorrelationHeader header         = 1;
+  string                            command_event_id = 2;  // echoes ControlCommand.header.event_id
+  bool                              received        = 3;
+  int64                             received_at_ms  = 4;   // Unix ms — vehicle-side timestamp
+}

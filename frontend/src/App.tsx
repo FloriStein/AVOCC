@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { useSystemState } from "@/hooks/useSystemState";
 import { useSession } from "@/hooks/useSession";
 import { useTelemetry } from "@/hooks/useTelemetry";
+import { useVehicleAck } from "@/hooks/useVehicleAck";
 import { SafeModeOverlay } from "@/components/SafeModeOverlay";
 import { SafetyPanel } from "@/components/SafetyPanel";
 import { ConnectionPanel } from "@/components/ConnectionPanel";
 import { VideoPanel } from "@/components/VideoPanel";
 import { ControlPanel } from "@/components/ControlPanel";
+import { InputIndicatorPanel } from "@/components/InputIndicatorPanel";
 import { StreamSenderPanel } from "@/components/StreamSenderPanel";
 
 const VEHICLE_ID = "vehicle-001";
@@ -42,6 +44,7 @@ export default function App() {
   const state = useSystemState();
   const session = useSession();
   const telemetry = useTelemetry(session.sessionId ? VEHICLE_ID : null);
+  const vehicleAck = useVehicleAck(session.sessionId ? VEHICLE_ID : null);
   const [showSender, setShowSender] = useState(false);
 
   const isConnected =
@@ -138,13 +141,14 @@ export default function App() {
       {/* Stream Sender — collapsible, toggle via header button */}
       {showSender && <StreamSenderPanel />}
 
-      {/* Control Panel Footer */}
+      {/* Footer: Operator Inputs + Vehicle Feedback */}
       <footer className="bg-gray-800 border-t border-gray-700">
         <ControlPanel
           wsClient={session.wsClient}
           sessionId={session.sessionId}
           enabled={isConnected}
         />
+        <InputIndicatorPanel telemetry={telemetry} ack={vehicleAck} />
       </footer>
     </div>
   );

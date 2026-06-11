@@ -24,14 +24,22 @@ var svcLog = logger.New("control-server")
 
 const maxCommandsPerSecond = 100
 
+// VehicleForwarder forwards raw ControlCommand bytes to the vehicle (ADR-021).
+// Implemented by vehicleconnection.Registry. Fire-and-forget: errors are logged
+// but never block the Control path.
+type VehicleForwarder interface {
+	ForwardCommand(vehicleID string, data []byte) error
+}
+
 // Engine routes parsed ControlCommands to the correct handler (ADR-007).
 type Engine struct {
-	sm          *statemachine.Machine
-	safetyPub   safety.Publisher
-	sessionMgr  *session.Manager
-	deadman     *safety.DeadmanWatchdog
-	auditWriter audit.AuditWriter
-	limiter     *tokenBucket
+	sm              *statemachine.Machine
+	safetyPub       safety.Publisher
+	sessionMgr      *session.Manager
+	deadman         *safety.DeadmanWatchdog
+	auditWriter     audit.AuditWriter
+	vehicleForwarder VehicleForwarder
+	limiter         *tokenBucket
 }
 
 func NewEngine(
@@ -52,6 +60,12 @@ func NewEngine(
 // WithAuditWriter sets the audit writer for EMERGENCY_STOP persistence (ADR-018).
 func (e *Engine) WithAuditWriter(aw audit.AuditWriter) *Engine {
 	e.auditWriter = aw
+	return e
+}
+
+// WithVehicleForwarder sets the vehicle forwarder for command delivery (ADR-021).
+func (e *Engine) WithVehicleForwarder(f VehicleForwarder) *Engine {
+	e.vehicleForwarder = f
 	return e
 }
 
@@ -117,6 +131,12 @@ func (e *Engine) Handle(rawMsg []byte, sess session.Session) ([]byte, error) {
 		controlv1.CommandType_COMMAND_TYPE_SPEED:
 		svcLog.Debug("control command",
 			"type", cmd.Type, "value", cmd.Value, "session_id", sess.ID)
+		// Forward raw Protobuf bytes to vehicle (ADR-021). Fire-and-forget.
+		if e.vehicleForwarder != nil && sess.VehicleID != "" {
+			if err := e.vehicleForwarder.ForwardCommand(sess.VehicleID, rawMsg); err != nil {
+				svcLog.Debug("vehicle forward failed", "vehicle_id", sess.VehicleID, "error", err)
+			}
+		}
 
 	default:
 		svcLog.Warn("unhandled command type", "type", cmd.Type)

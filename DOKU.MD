@@ -248,6 +248,7 @@ React 18 + TypeScript SPA. Operatoren-Dashboard mit:
 | `SafetyPanel` | Emergency Stop, Dead-man Switch (Spacebar) |
 | `ConnectionPanel` | SYSTEM STATE, Latenz, Session-ID, Telemetrie |
 | `SafeModeOverlay` | Fullscreen-Block, Operator-Ack für Recovery |
+| `InputIndicatorPanel` | Fahrzeug-Feedback: Lenkrad-SVG (Ist), ActuationBars (Soll/Ist), AckBadge (ADR-021) |
 
 **Port:** 3000 (nginx im Docker), 5173 (Vite Dev-Server)
 
@@ -262,8 +263,9 @@ AutonomousVehicleOperationalControlCenter/
 │   ├── common.proto              # CorrelationHeader (session_id, event_id, ...)
 │   ├── control.proto             # Steuerbefehle + ControlAck
 │   ├── safety.proto              # Safety Events
-│   ├── telemetry.proto           # Telemetrie
-│   └── session.proto             # Session Events (SFU) + RecordingEntry
+│   ├── telemetry.proto           # Telemetrie incl. Actuation Fields (ADR-021)
+│   ├── session.proto             # Session Events (SFU) + RecordingEntry
+│   └── vehicle.proto             # VehicleCommandAck (ADR-021)
 │
 ├── gen/                          # Generiert — gitignored, NIEMALS committen
 │   ├── go/                       # protoc-gen-go Output
@@ -274,7 +276,8 @@ AutonomousVehicleOperationalControlCenter/
 │   ├── auth-service/
 │   ├── safety-service/
 │   ├── telemetry-service/
-│   └── webrtc-sfu/
+│   ├── webrtc-sfu/
+│   └── vehicle-mock/             # Fahrzeug-Simulation (Docker, JWT self-gen, ACK, MQTT — ADR-021)
 │
 ├── internal/                     # Go Service-interne Pakete (nicht extern nutzbar)
 │   ├── controlserver/
@@ -286,7 +289,7 @@ AutonomousVehicleOperationalControlCenter/
 │   ├── authservice/
 │   ├── safetyservice/            # Safety Event Bus
 │   ├── telemetryservice/         # MQTT Client
-│   ├── vehicleconnection/        # Vehicle WebSocket Handler
+│   ├── vehicleconnection/        # Vehicle WebSocket: Registry, AckStore, Handler (ADR-021)
 │   ├── webrtcsfu/                # WebRTC SFU Logik
 │   └── recording/                # Session Recording Interface + MemoryRecorder
 │
@@ -579,11 +582,11 @@ Die Datei `.env` (aus `.env.example`) enthält:
 
 | Suite | Befehl | Zweck | Anzahl |
 |-------|--------|-------|--------|
-| Safety Unit Tests | `make test-safety` | 19 Safety-Szenarien — CI Gate | 19/19 |
+| Safety + Vehicle Unit Tests | `make test-safety` | 19 Safety + 7 vehicleconnection — CI Gate | 26/26 |
 | Go Integration Tests | `make test-integration` | Service-Interaktion End-to-End | 9 |
 | Go Latenz-Benchmark | `make test-latency` | ACK-Roundtrip < 100ms | — |
 | k6 Lasttest | `make test-k6` | 10 VU / 30s Lastprofil | — |
-| Vitest Component | `cd frontend && npm test` | React Komponenten | 31 |
+| Vitest Component | `cd frontend && npm test` | React Komponenten | 41 |
 | Playwright E2E | `cd frontend && npm run test:e2e` | Browser-seitig, benötigt Stack | — |
 
 ### Safety Test Suite — wichtigstes CI Gate
@@ -660,7 +663,7 @@ Dateien wie `detector.go`, `statemachine.go`, `websocket.go` erfordern besondere
 
 Alle wichtigen Architekturentscheidungen sind als **Architecture Decision Records (ADRs)** dokumentiert. ADRs sind **unveränderlich** — neue Erkenntnisse führen zu einem neuen ADR, nicht zur Änderung eines bestehenden.
 
-### Übersicht der 20 ADRs
+### Übersicht der 21 ADRs
 
 | ADR | Titel | Kern-Entscheidung |
 |-----|-------|-------------------|
@@ -685,6 +688,7 @@ Alle wichtigen Architekturentscheidungen sind als **Architecture Decision Record
 | ADR-018 | Audit Trail Strategy | SQLite WAL für garantierte Safety-Event-Persistenz |
 | ADR-019 | Deployment-Strategie | Docker Hub + EC2 + AWS SSM Parameter Store |
 | ADR-020 | Video Ingestion & Distribution | MediaMTX WHIP/WHEP + Browser-ICE-Gathering via `/api/ice-config` |
+| ADR-021 | Vehicle Connectivity & Feedback | JWT sub=vehicleID; Protobuf end-to-end; WS ACK + MQTT Telemetrie; vehicle-mock |
 
 Vollständige ADRs: [docs/adr/](docs/adr/) | Live-Übersicht: [DECISIONS.MD](DECISIONS.MD)
 
@@ -1332,4 +1336,4 @@ func TestSafety_InvalidTransitionRejected(t *testing.T) {
 
 ---
 
-*Stand: Sprint 10 abgeschlossen ✅ | 10 Sprints · 78 Tasks · 20 ADRs | E2E Smoke Test (Browser WHIP → WHEP, HTTPS) bestätigt · 5G TURN-Relay ausstehend (2026-06-11)*
+*Stand: Sprint 11 abgeschlossen ✅ | 11 Sprints · 90 Tasks · 21 ADRs | Go Build + 26 Unit Tests + 41 Frontend Tests grün · Vehicle Connectivity & Feedback implementiert (ADR-021) (2026-06-11)*

@@ -195,6 +195,25 @@ services:
     networks:
       - avoc-net
 
+  # ─── Vehicle Mock — simuliert Raspberry Pi (ADR-021) ──────────────────────
+  # Implementiert dieselbe Schnittstelle wie ein reales Fahrzeug:
+  # WS-Connect auf /vehicle/ws, ControlCommand decode, ACK senden, MQTT Telemetrie.
+  vehicle-mock:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/vehicle-mock.Dockerfile
+    environment:
+      VEHICLE_ID: "vehicle-001"
+      CONTROL_SERVER_URL: "ws://control-server:8080/vehicle/ws"
+      JWT_SECRET: ${JWT_SECRET}
+      MQTT_BROKER: "mosquitto:1883"
+    depends_on:
+      - control-server
+      - mosquitto
+    networks:
+      - avoc-net
+    restart: unless-stopped
+
 networks:
   avoc-net:
     driver: bridge
