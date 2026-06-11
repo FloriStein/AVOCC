@@ -3,7 +3,7 @@
 Lifecycle: backlog → sprint → done
 Typen: S (<30 Min), M (30–180 Min), L (Architektur, ADR-pflichtig)
 
-Stand: 2026-06-10 — aktualisiert nach Sprint 10 (WebRTC ICE Migration, deployed)
+Stand: 2026-06-11 — aktualisiert nach Sprint 11 (Vehicle Connectivity & Feedback, ADR-021)
 
 ---
 
@@ -124,6 +124,25 @@ LOG-10 → LOG-11 (nach LOG-02)
 
 ---
 
+## EPIC: Vehicle Connectivity & Feedback (Sprint 11) ✅
+
+| ID | Task | Typ | Status | Ergebnis |
+|----|------|-----|--------|----------|
+| VEH-01 | ADR-021 — Vehicle Connectivity & Feedback Architecture | L | ✅ Sprint 11 | `docs/adr/021-vehicle-connectivity-feedback.md` |
+| VEH-02 | `proto/vehicle.proto` — VehicleCommandAck | S | ✅ Sprint 11 | Protobuf: header + command_event_id + received + received_at_ms |
+| VEH-03 | `proto/telemetry.proto` — Actuation Fields 7–11 | S | ✅ Sprint 11 | steer/throttle/brake commanded + actual |
+| VEH-04 | `internal/vehicleconnection/registry.go` — Registry + ForwardCommand | M | ✅ Sprint 11 | VehicleForwarder-Interface-Implementierung; thread-safe |
+| VEH-05 | `internal/vehicleconnection/ackstore.go` — AckStore | S | ✅ Sprint 11 | Latest-ACK je vehicleID, sync.RWMutex |
+| VEH-06 | `internal/controlserver/command/engine.go` — VehicleForwarder | M | ✅ Sprint 11 | Interface + WithVehicleForwarder(); kritischer Gap geschlossen |
+| VEH-07 | `cmd/control-server/main.go` — Verdrahtung + ACK-Endpoint | M | ✅ Sprint 11 | `GET /vehicle/ack/latest/{vehicleID}` |
+| VEH-08 | `cmd/vehicle-mock/main.go` — Docker-Service | L | ✅ Sprint 11 | JWT self-gen, WS, Protobuf decode, ACK send, MQTT lerp 15% |
+| VEH-09 | `vehicle-mock.Dockerfile` + Compose + nginx | M | ✅ Sprint 11 | `/vehicle/` Proxy-Location, docker-compose dev+prod |
+| VEH-10 | `useVehicleAck.ts` — Frontend Hook | S | ✅ Sprint 11 | 500ms-Polling `/vehicle/ack/latest/` |
+| VEH-11 | `InputIndicatorPanel.tsx` — Fahrzeug-Feedback UI | M | ✅ Sprint 11 | Lenkrad-SVG (steerActual×120°), ActuationBars, AckBadge |
+| VEH-12 | Tests: 7 Go + 7 TypeScript | M | ✅ Sprint 11 | 26/26 Go Unit, 41/41 Frontend Tests grün |
+
+---
+
 ## EPIC: WebRTC ICE Migration (Sprint 10) ✅
 
 | ID | Task | Typ | Status | Abhängigkeiten |
@@ -152,6 +171,9 @@ LOG-10 → LOG-11 (nach LOG-02)
 | MQTT-Authentifizierung (Mosquitto Passwort-File) | offen | Port 1883 aktuell ohne Auth offen |
 | Multi-Vehicle / vehicleId-Routing in MediaMTX | offen | ADR-020 Folge — Sprint 10 nutzt fixed path `vehicle-001` |
 | E2E Smoke Test mit aktiver WHIP-Quelle | offen | WEBRTC-09 Rest — Browser WiFi + 5G ICE-Pair verifizieren |
+| Dev-Stack SSL-Fix: nginx.conf dev/prod trennen | offen | Sprint-10-Regression — `make up` startet Frontend nicht ohne SSL-Cert |
+| vehicle-mock in Makefile GO_SERVICES | offen | build-prod + push übersehen vehicle-mock |
+| session_id in MQTT-TelemetryEvent (vehicle-mock) | offen | Log-Korrelations-Gap: vehicle-mock hat keinen Operator-Session-Kontext |
 
 ---
 
@@ -172,4 +194,7 @@ Phase 9 — Video Stream: Larix WHIP → MediaMTX → Browser ✅ (abgeschlossen
 
 Phase 10 — Browser WebRTC ICE Migration ✅ (deployed 2026-06-10)
   WEBRTC-01..09 ✅ (E2E Smoke Test offen)
+
+Phase 11 — Vehicle Connectivity & Feedback ✅ (abgeschlossen 2026-06-11)
+  VEH-01..12 ✅ — Go Build + 26/26 Unit Tests + 41/41 Frontend Tests grün
 ```

@@ -21,6 +21,11 @@
 | **Control Hub** | Control Server als Rang-1-Hub für Safety Truth und Command Routing (ADR-007) |
 | **Video Hub** | MediaMTX WHIP/WHEP Router als Rang-2-Hub für Live-Video Ingestion und Distribution (ADR-007/014/020) |
 | **WebRTC SFU** | Selective Forwarding Unit (Pion/Go) — bleibt als Session-Event-Consumer aktiv; Media-Routing durch MediaMTX (ADR-020) |
+| **vehicle-mock** | Docker-Go-Service der ein echtes Fahrzeug simuliert: JWT self-gen, WS-Connect zu `/vehicle/ws`, Protobuf-Decode, VehicleCommandAck senden, MQTT-Telemetrie mit Aktuator-Simulation (ADR-021) |
+| **VehicleForwarder** | Go-Interface im Command Engine — `ForwardCommand(vehicleID string, data []byte) error`; implementiert durch vehicleconnection.Registry (ADR-021) |
+| **VehicleCommandAck** | Protobuf-Nachricht vom Fahrzeug: bestätigt Empfang eines ControlCommand per WebSocket; enthält command_event_id-Echo und received_at_ms (ADR-021) |
+| **ActuationFeedback** | Aktuator-Ist-Werte im TelemetryEvent: steer_actual, throttle_actual (mit simuliertem 15%-Lag via Lerp); zeigt was das Fahrzeug tatsächlich ausführt vs. was befohlen wurde (ADR-021) |
+| **InputIndicatorPanel** | React-Komponente im Footer: zeigt Fahrzeug-Ist-Zustand (Lenkrad-SVG rotiert mit steerActual, ActuationBars Soll/Ist, AckBadge mit Verbindungsstatus) |
 | **Protobuf** | Protocol Buffers — Application Bus für Control/Safety/Telemetry (ADR-008) |
 | **CorrelationHeader** | Protobuf-Nachrichtenfeld in allen Schemas: session_id, event_id, vehicle_id, operator_id, timestamp (ADR-016) |
 | **ULID** | Universally Unique Lexicographically Sortable Identifier — Format der Session-IDs (zeitlich sortierbar) |
@@ -181,6 +186,8 @@ JWT = Identity (Wer bist du?) ≠ Session-ID (In welchem Kontext?)
 | MQTT Broker | Eclipse Mosquitto | ADR-003 |
 | Video | MediaMTX WHIP/WHEP + coturn | ADR-014/020 |
 | Authentifizierung | Separater Auth Service (JWT, Operator + Vehicle) | ADR-004 |
+| Vehicle Connectivity | `/vehicle/ws` WebSocket, Protobuf end-to-end, vehicleconnection.Registry | ADR-021 |
+| Vehicle Feedback | VehicleCommandAck (WS) + TelemetryEvent Actuation Fields (MQTT) | ADR-021 |
 | Session-ID | ULID, generiert vom Control Server (GSA) | ADR-016 |
 | Session Recording | Abstraktes Interface (Storage noch offen) | ADR-005 |
 | Deployment | Docker Compose (kein Kubernetes) | CONTEXT |
@@ -214,6 +221,9 @@ JWT = Identity (Wer bist du?) ≠ Session-ID (In welchem Kontext?)
 | Frontend → Control Server | Synchron ACK-based (non-blocking UI) |
 | Control Server → MQTT Telemetry | Async (one-way) |
 | Control Server → SFU | Async Event-Push (SESSION_* Events) |
+| Control Server → Vehicle (vehicleconnection.Registry) | Sync Fire-and-Forget WebSocket (ADR-021) |
+| Vehicle → Control Server (VehicleCommandAck) | Async WebSocket, gespeichert in AckStore (ADR-021) |
+| Frontend → GET /vehicle/ack/latest/ | Polling 500ms (useVehicleAck) |
 
 ---
 
@@ -251,6 +261,9 @@ JWT = Identity (Wer bist du?) ≠ Session-ID (In welchem Kontext?)
 | Session Recording Storage (DB / Files / Object Storage) | offen | ADR-005 Folge — MemoryRecorder seit Sprint 4 als Platzhalter aktiv; Storage-ADR ausstehend |
 | DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
 | Backup-Strategie Audit Store (SQLite Volume) | offen | ADR-019 möglich — SQLite-Volume-Sicherung für Produktivbetrieb (LOG-10 implementiert) |
+| vehicle-mock in Makefile GO_SERVICES | offen | ADR-021 Folge — `make build-prod` baut vehicle-mock nicht |
+| session_id in MQTT-TelemetryEvent | offen | ADR-021 Folge — Log-Korrelations-Gap: vehicle-mock hat keinen Operator-Session-Kontext |
+| Dev-Stack SSL-Fix (nginx.conf) | offen | Sprint-10-Regression: `make up` startet Frontend lokal nicht ohne SSL-Cert |
 
 ---
 
@@ -267,3 +280,4 @@ JWT = Identity (Wer bist du?) ≠ Session-ID (In welchem Kontext?)
 9. **Correlation-First** — alle Kanäle tragen Session-ID (ULID); vollständige Rekonstruierbarkeit (ADR-016)
 10. **Hybrid Logging** — Technical Logs async (slog → Loki); Safety Events sync (AuditWriter.WriteSync + fsync vor SAFE_MODE); drei Log-Klassen (ADR-017/018)
 11. **Safety-Log-Garantie** — Safety Events dürfen niemals verloren gehen; separater SQLite Audit Store orthogonal zu Loki (ADR-018)
+12. **Vehicle-Feedback-First** — InputIndicatorPanel zeigt was beim Fahrzeug ankommt, nicht was der Operator eingibt; Ist-Werte > Soll-Werte für Safety-Awareness (ADR-021)

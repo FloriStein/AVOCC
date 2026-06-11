@@ -1,24 +1,19 @@
-# Sprint 10 — Browser WebRTC ICE Migration ✅
+# Sprint 11 — Vehicle Connectivity & Feedback ✅
 
-Ziel: WHEP-basierter Browser-Videoempfang funktioniert zuverlässig auch auf 5G/LTE (CGNAT).
-Drei Root Causes aus der Sprint-9-Debugging-Phase werden behoben.
+Ziel: Steuerbefehle kommen tatsächlich beim Fahrzeug an. Operator sieht Aktuator-Ist-Werte.
 
-Datum: 2026-06-10 | **Status: Deployed ✅** (12/12 Container Up auf EC2 `18.196.24.10`)
-Vorgänger: Sprint 9 ✅ (MediaMTX WHIP/WHEP Video Stream — ADR-020)
+Datum: 2026-06-11 | **Status: Abgeschlossen ✅**
+Vorgänger: Sprint 10 ✅ (Browser WebRTC ICE Migration + HTTPS + Browser WHIP Sender)
 
-Vollständige Dokumentation: [`docs/sprints/sprint-10-webrtc-ice-migration.md`](../docs/sprints/sprint-10-webrtc-ice-migration.md)
+Vollständige Dokumentation: [`docs/sprints/sprint-11-vehicle-connectivity.md`](../docs/sprints/sprint-11-vehicle-connectivity.md)
+Verification Report: [`docs/sprints/sprint-11-verification.md`](../docs/sprints/sprint-11-verification.md)
 
 ---
 
-## Root Cause Analyse
+## Root Cause: Critical Gap
 
-| # | Problem | Ursache | Fix |
-|---|---------|---------|-----|
-| 1 | Candidate Explosion | `webrtcIPsFromInterfaces` fehlte → alle Docker-IPs annonciert | `webrtcIPsFromInterfaces: false` + `webrtcAdditionalHosts: [EC2-EIP]` |
-| 2 | Srflx auf gesperrten Ports | `webrtcICEServers2` → MediaMTX gathert eigene Candidates auf ephemeren Ports | `webrtcICEServers2` entfernt — nur Browser gathert |
-| 3 | Pion DTLS-Client-Bug | Browser sendet `actpass`, Pion verarbeitet ServerHello nicht | `a=setup:actpass → active` in `useWebRTC.ts` |
-| 4 | Kein TURN-Fallback | `useWebRTC.ts` nur STUN — kein TURN bei symmetrischem NAT (5G) | `/api/ice-config` Endpoint + TURN UDP + TURN TCP |
-| 5 | coturn relay-ip leer | `deploy.sh` nutzte IMDSv1, Amazon Linux 2023 erfordert IMDSv2 | IMDSv2 Token-Header in deploy.sh |
+Vor diesem Sprint wurden Steuerbefehle **nie** zum Fahrzeug weitergeleitet.
+`readLoop` in `internal/vehicleconnection/handler.go` hat alle eingehenden Nachrichten still verworfen.
 
 ---
 
@@ -26,28 +21,49 @@ Vollständige Dokumentation: [`docs/sprints/sprint-10-webrtc-ice-migration.md`](
 
 | ID | Task | Typ | Status |
 |----|------|-----|--------|
-| WEBRTC-01 | CDK Security Group: 3478 (TCP+UDP), 8189 (UDP), 49152–65535 (UDP) | S | ✅ |
-| WEBRTC-02 | `mediamtx.yml`: `webrtcIPsFromInterfaces: false`, ICEServers2 entfernen, Port 8189 | S | ✅ |
-| WEBRTC-03 | `docker-compose.prod.yml`: coturn `network_mode: host`, relay-ip, external-ip | M | ✅ |
-| WEBRTC-04 | `docker-compose.prod.yml`: mediamtx UDP-Port 8889 → 8189 | S | ✅ |
-| WEBRTC-05 | `scripts/deploy.sh`: `TURN_PRIVATE_IP` aus EC2 IMDS (IMDSv2) | S | ✅ |
-| WEBRTC-06 | control-server: `GET /ice-config` — ICE-Server-Liste mit TURN-Credentials | M | ✅ |
-| WEBRTC-07 | `docker-compose.prod.yml`: control-server bekommt `TURN_USER` + `TURN_PASSWORD` | S | ✅ |
-| WEBRTC-08 | `useWebRTC.ts`: DTLS-Fix, TURN-ICE-Server, `/api/ice-config` fetch | M | ✅ |
-| WEBRTC-09 | Deploy auf EC2; E2E Smoke Test | M | ✅ deployed, E2E offen |
+| VEH-01 | ADR-021 — Vehicle Connectivity & Feedback Architecture | L | ✅ |
+| VEH-02 | `proto/vehicle.proto` — VehicleCommandAck | S | ✅ |
+| VEH-03 | `proto/telemetry.proto` — Actuation Fields 7–11 | S | ✅ |
+| VEH-04 | `internal/vehicleconnection/registry.go` — Registry + ForwardCommand | M | ✅ |
+| VEH-05 | `internal/vehicleconnection/ackstore.go` — AckStore | S | ✅ |
+| VEH-06 | `internal/controlserver/command/engine.go` — VehicleForwarder Interface | M | ✅ |
+| VEH-07 | `cmd/control-server/main.go` — Verdrahtung + `GET /vehicle/ack/latest/` | M | ✅ |
+| VEH-08 | `cmd/vehicle-mock/main.go` — JWT self-gen, WS, Protobuf, MQTT, Lerp | L | ✅ |
+| VEH-09 | `vehicle-mock.Dockerfile` + Compose + nginx `/vehicle/` Proxy | M | ✅ |
+| VEH-10 | `useVehicleAck.ts` — Hook 500ms-Polling `/vehicle/ack/latest/` | S | ✅ |
+| VEH-11 | `InputIndicatorPanel.tsx` — Lenkrad-SVG + ActuationBars + AckBadge | M | ✅ |
+| VEH-12 | Tests: `vehicleconnection_test.go` (7) + `InputIndicatorPanel.test.tsx` (7) | M | ✅ |
+
+---
+
+## Verification (E2E bestätigt)
+
+- ✅ Go Build EXIT 0
+- ✅ 26/26 Unit Tests (19 Safety + 7 vehicleconnection)
+- ✅ 41/41 Frontend Tests
+- ✅ STEER=0.75 → ACK <500ms → steer_actual=0.6375 (15% Lag, Lerp korrekt)
+- ✅ SAFE_MODE bei WS-Disconnect (Safety-Invarianten intakt)
+- ⚠️ Finding: `make up` startet Frontend lokal nicht ohne SSL-Cert (Sprint-10-Regression)
 
 ---
 
 ## Definition of Done
 
-- [x] CDK/SG: Port 3478 (TCP+UDP), 8189 (UDP), 49152–65535 (UDP) offen
-- [x] mediamtx: `webrtcIPsFromInterfaces: false`, `webrtcAdditionalHosts: ['18.196.24.10']`, Port 8189
-- [x] coturn: `network_mode: host`, `relay-ip=10.0.33.191`, `external-ip=18.196.24.10/10.0.33.191`
-- [x] `GET /api/ice-config` (nginx) liefert STUN + TURN UDP + TURN TCP — extern verifiziert
-- [x] Alle 12 Container Up auf EC2 `18.196.24.10`
-- [x] WHEP Auth-Hook: 401 ohne Session — verifiziert
-- [x] Frontend `http://18.196.24.10:3000/` → HTTP 200 — extern verifiziert
-- [x] 31/31 TypeScript Unit-Tests, Go Unit-Tests grün
-- [ ] Browser WiFi: `srflx`-ICE-Pair — ausstehend (WHIP-Quelle nötig)
-- [ ] Browser 5G: `relay`-ICE-Pair via TURN — ausstehend
-- [ ] `MEDIA_CONNECTED` im Operator-UI — ausstehend
+- [x] ControlCommand per WebSocket an Fahrzeug weitergeleitet (VehicleForwarder)
+- [x] vehicle-mock: JWT self-gen, WS connect, Protobuf decode, ACK senden
+- [x] VehicleCommandAck gespeichert, per `GET /vehicle/ack/latest/` abrufbar
+- [x] TelemetryEvent mit Aktuator-Ist-Werten (steer/throttle, 15% Lag via Lerp)
+- [x] InputIndicatorPanel: Lenkrad-SVG + ActuationBars + AckBadge im Footer
+- [x] ADR-021 dokumentiert
+- [x] Verification Report erstellt
+- [x] Alle Tests grün (Go Build + 26 Unit + 41 Frontend)
+
+---
+
+## Nächste Schritte (Sprint 12 — Backlog)
+
+Kein aktiver Sprint. Offene Punkte aus Backlog:
+- Dev-Stack SSL-Fix: nginx.conf dev/prod trennen (Sprint-10-Regression)
+- E2E Smoke Test auf EC2 mit Fahrzeug-Feedback
+- vehicle-mock zu Makefile GO_SERVICES hinzufügen
+- session_id in MQTT-TelemetryEvent (vehicle-mock Session-Kontext)

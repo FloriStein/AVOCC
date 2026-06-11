@@ -25,6 +25,7 @@
 | [ADR-018](docs/adr/018-audit-trail-strategy.md) | Audit Trail Strategy | Accepted | SQLite WAL (embedded, kein extra Service) als AuditWriter-Implementierung; garantierte Persistenz Safety Events; fsync vor SAFE_MODE |
 | [ADR-019](docs/adr/019-deployment-strategy.md) | Deployment-Strategie | Accepted | Docker Hub private Repos + EC2 Elastic IP + AWS SSM Parameter Store; linux/amd64; kein Quellcode auf EC2; deploy.sh als Deployment-Mechanismus |
 | [ADR-020](docs/adr/020-mediamtx-whip-whep.md) | Video Ingestion & Distribution | Accepted | MediaMTX als WHIP/WHEP Router; Larix → WHIP; Browser → WHEP; Control Server = einzige Auth-Instanz; Control Server kickt MediaMTX bei SAFE_MODE. Sprint 10 Nachtrag: `webrtcICEServers2` entfernt — Browser übernimmt ICE-Gathering via `/api/ice-config` |
+| [ADR-021](docs/adr/021-vehicle-connectivity-feedback.md) | Vehicle Connectivity & Feedback | Accepted | JWT `sub=vehicleID` (Auth Service); Protobuf end-to-end; VehicleForwarder-Interface; Zwei-Stufen-Feedback: WS ACK (Transport) + MQTT Telemetrie (Aktuator-Ist-Werte); vehicle-mock Docker-Service |
 
 ## Offene Folge-Entscheidungen
 
@@ -40,3 +41,6 @@
 | Multi-Vehicle / vehicleId-Routing in MediaMTX | offen | ADR-020 Folge — Sprint 10 nutzt fixed path `vehicle-001` |
 | WHEP Auth für mehrere Operatoren (Session-basiert) | offen | ADR-020 Folge |
 | E2E Smoke Test (Browser WiFi + 5G TURN-Relay) | offen | WEBRTC-09 Rest — WHIP-Quelle nötig |
+| vehicle-mock in Makefile GO_SERVICES | offen | ADR-021 Folge — `make build-prod` / `make push` bauen vehicle-mock nicht |
+| session_id in MQTT-TelemetryEvent | offen | ADR-021 Folge — vehicle-mock setzt kein session_id; Log-Korrelations-Gap |
+| Dev-Stack SSL-Fix | offen | Sprint-10-Regression — nginx.conf erwartet SSL-Cert; `make up` startet Frontend nicht |
