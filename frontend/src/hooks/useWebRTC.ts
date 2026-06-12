@@ -73,6 +73,7 @@ export function useWebRTC(sessionId: string | null, vehicleId: string, token: st
     }
 
     pc.oniceconnectionstatechange = () => {
+      if (pc !== pcRef.current) return
       if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
         updateState('MEDIA_FAILED')
       }
@@ -80,6 +81,9 @@ export function useWebRTC(sessionId: string | null, vehicleId: string, token: st
 
     try {
       const offer = await pc.createOffer()
+      // Guard: verhindert Race Condition durch React StrictMode double-mount.
+      // Wenn eine neuere connect()-Instanz unsere PC ersetzt hat, still abbrechen.
+      if (pc !== pcRef.current) return
 
       // Pion v1.19.0 DTLS-Client-Bug: nach dem Senden von ClientHello verarbeitet Pion
       // den ServerHello des Browsers nicht → Retransmit-Loop bis Timeout.
@@ -87,12 +91,13 @@ export function useWebRTC(sessionId: string | null, vehicleId: string, token: st
       // Pions DTLS-Server-Pfad ist stabil; nur der Client-Pfad hat diesen Bug.
       const fixedSdp = offer.sdp!.replace(/a=setup:actpass/g, 'a=setup:active')
       await pc.setLocalDescription({ type: 'offer', sdp: fixedSdp })
+      if (pc !== pcRef.current) return
 
       // WHEP: alle ICE-Candidates vollständig abwarten bevor der Offer gesendet wird.
       // MediaMTX erwartet alle Candidates im initialen POST (kein Trickle-ICE).
       await new Promise<void>(resolve => {
         if (pc.iceGatheringState === 'complete') { resolve(); return }
-        const tid = setTimeout(resolve, 5000)
+        const tid = setTimeout(resolve, 2000)
         pc.addEventListener('icegatheringstatechange', function handler() {
           if (pc.iceGatheringState === 'complete') {
             clearTimeout(tid)
@@ -101,6 +106,7 @@ export function useWebRTC(sessionId: string | null, vehicleId: string, token: st
           }
         })
       })
+      if (pc !== pcRef.current) return
 
       const res = await fetch(`/whep/${vehicleId}/whep`, {
         method: 'POST',
@@ -110,13 +116,15 @@ export function useWebRTC(sessionId: string | null, vehicleId: string, token: st
         },
         body: pc.localDescription!.sdp,
       })
+      if (pc !== pcRef.current) return
 
       if (!res.ok) { updateState('MEDIA_FAILED'); return }
 
       const answerSdp = await res.text()
+      if (pc !== pcRef.current) return
       await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp })
     } catch {
-      updateState('MEDIA_FAILED')
+      if (pc === pcRef.current) updateState('MEDIA_FAILED')
     }
   }, [sessionId, vehicleId, token, disconnect, updateState])
 
@@ -129,6 +137,14 @@ export function useWebRTC(sessionId: string | null, vehicleId: string, token: st
     return disconnect
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, sessionId, vehicleId, token])
+
+  // Auto-retry when stream not yet available (MEDIA_FAILED + enabled)
+  useEffect(() => {
+    if (mediaState !== 'MEDIA_FAILED' || !enabled || !sessionId || !token) return
+    const tid = setTimeout(connect, 3000)
+    return () => clearTimeout(tid)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mediaState, enabled, sessionId, token])
 
   return { videoRef, streamRef, mediaState, connect, disconnect }
 }

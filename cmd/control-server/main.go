@@ -38,6 +38,7 @@ func main() {
 	whipStreamKey := os.Getenv("WHIP_STREAM_KEY")
 	mediamtxAPIURL := envOr("MEDIAMTX_API_URL", "http://mediamtx:9997")
 	turnExternalIP := os.Getenv("TURN_EXTERNAL_IP")
+	turnPort := envOr("TURN_PORT", "3478")
 	turnUser := os.Getenv("TURN_USER")
 	turnPassword := os.Getenv("TURN_PASSWORD")
 	mtxClient := mediamtx.NewClient(mediamtxAPIURL)
@@ -331,6 +332,14 @@ func main() {
 		})
 	})
 
+	// DEV: Stream key for browser-based WHIP sender (StreamSenderPanel).
+	// The stream key is a shared secret known to the publisher — exposing it here
+	// only saves the developer from manually copying it from .env.
+	mux.HandleFunc("GET /dev/whip-key", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"streamKey": whipStreamKey})
+	})
+
 	// State + Health
 	mux.HandleFunc("GET /state", func(w http.ResponseWriter, _ *http.Request) {
 		sys, ctrl, media, op := sm.Get()
@@ -359,9 +368,9 @@ func main() {
 		}
 		host := turnExternalIP
 		servers := []iceServer{
-			{URLs: []string{"stun:" + host + ":3478"}},
-			{URLs: []string{"turn:" + host + ":3478"}, Username: turnUser, Credential: turnPassword},
-			{URLs: []string{"turn:" + host + ":3478?transport=tcp"}, Username: turnUser, Credential: turnPassword},
+			{URLs: []string{"stun:" + host + ":" + turnPort}},
+			{URLs: []string{"turn:" + host + ":" + turnPort}, Username: turnUser, Credential: turnPassword},
+			{URLs: []string{"turn:" + host + ":" + turnPort + "?transport=tcp"}, Username: turnUser, Credential: turnPassword},
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{"iceServers": servers})

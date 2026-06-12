@@ -32,12 +32,15 @@ services:
       AUDIT_DB_PATH: "/data/audit/avoc_audit.db"
       LOG_LEVEL: "info"
       WHIP_STREAM_KEY: ${WHIP_STREAM_KEY:-dev-stream-key-change-in-production}
-      MEDIAMTX_API_URL: "http://mediamtx:9997"
+      MEDIAMTX_API_URL: "http://host.docker.internal:9997"
       TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:-127.0.0.1}
+      TURN_PORT: ${TURN_PORT:-3479}
       TURN_USER: ${TURN_USER:-avoc}
       TURN_PASSWORD: ${TURN_PASSWORD:-changeme}
     volumes:
       - audit-data:/data/audit
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Damit MEDIAMTX_API_URL auf mediamtx (host network) zeigt
     depends_on:
       - auth-service
       - safety-service
@@ -117,40 +120,37 @@ services:
       - avoc-net
 
   # ─── MediaMTX — WHIP/WHEP Router (ADR-020) ───────────────────────────────
+  # network_mode: host — MediaMTX läuft direkt im Host-Netzwerk (Linux only).
+  # Kein Docker-NAT, kein Hairpin-Problem, WebRTC ICE funktioniert stabil.
+  # Ports sind automatisch auf dem Host (8889/tcp, 8189/udp, 9997/tcp).
   mediamtx:
     image: bluenviron/mediamtx:latest
-    ports:
-      - "8889:8889/tcp"   # WHIP/WHEP Signaling (HTTP)
-      - "8889:8889/udp"   # WebRTC ICE Transport
-      - "9997:9997"       # Management API
+    network_mode: host
     volumes:
-      - ../mediamtx/mediamtx.yml:/mediamtx.yml:ro
-    environment:
-      TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:-127.0.0.1}
-      TURN_USER: ${TURN_USER:-avoc}
-      TURN_PASSWORD: ${TURN_PASSWORD:-changeme}
+      - ../mediamtx/mediamtx.dev.yml:/mediamtx.yml:ro
     depends_on:
       - control-server
-      - stun-turn
-    networks:
-      - avoc-net
 
   # ─── STUN/TURN (coturn — ADR-014) ─────────────────────────────────────────
+  # Command-line args statt Config-File: Docker Compose substituiert ${VAR} direkt,
+  # coturn's eigener Config-Parser löst ${VAR} nicht auf.
   stun-turn:
     image: coturn/coturn:latest
     ports:
       - "3479:3478/udp"
       - "3479:3478/tcp"
-      - "5350:5349/udp"
-      - "5350:5349/tcp"
-      # TURN relay UDP range — only needed for Vehicle↔Internet↔OCC (not required for local dev)
-      # Map specific ports in production as needed
-    volumes:
-      - ../coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
-    environment:
-      TURN_REALM: ${TURN_REALM:-avoc.local}
-      TURN_USER: ${TURN_USER:-avoc}
-      TURN_PASSWORD: ${TURN_PASSWORD:-changeme}
+      - "49152-49400:49152-49400/udp"   # TURN relay range (249 ports)
+    command: >
+      --listening-port=3478
+      --external-ip=${TURN_EXTERNAL_IP:-127.0.0.1}
+      --realm=${TURN_REALM:-avoc.local}
+      --user=${TURN_USER:-avoc}:${TURN_PASSWORD:-changeme}
+      --min-port=49152
+      --max-port=49400
+      --fingerprint
+      --lt-cred-mech
+      --no-cli
+      --log-file=stdout
     networks:
       - avoc-net
 

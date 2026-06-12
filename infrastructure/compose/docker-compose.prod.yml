@@ -39,6 +39,7 @@ services:
       WHIP_STREAM_KEY: ${WHIP_STREAM_KEY}
       MEDIAMTX_API_URL: "http://mediamtx:9997"
       TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP}
+      TURN_PORT: "3478"
       TURN_USER: ${TURN_USER}
       TURN_PASSWORD: ${TURN_PASSWORD}
     volumes:

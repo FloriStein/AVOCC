@@ -1,0 +1,52 @@
+# MediaMTX — Dev-Config (network_mode: host, Docker Compose)
+#
+# ICE-Strategie: network_mode: host → MediaMTX läuft im Host-Netzwerk.
+#   webrtcIPsFromInterfaces: true — entdeckt alle Host-Interfaces (127.x, 192.168.x, etc.)
+#   Kein Docker-NAT, kein Hairpin-Problem, keine zusätzlichen Hosts nötig.
+#   Browser und MediaMTX kommunizieren direkt (kein Port-Mapping-Overhead).
+#
+# Auth: localhost:8080 = control-server Port-Mapping auf dem Host.
+# API:  Port 9997 liegt direkt auf dem Host (kein Mapping nötig).
+
+###############################################################################
+# API (Management)
+###############################################################################
+api: yes
+apiAddress: :9997
+
+###############################################################################
+# Logging
+###############################################################################
+logLevel: info
+logDestinations: [stdout]
+
+###############################################################################
+# WebRTC / WHIP / WHEP
+###############################################################################
+webrtc: yes
+webrtcAddress: :8889
+
+# Interface-Autodiscovery: mit network_mode: host sind alle Interfaces real
+# (127.x, LAN-IP, etc.) — keine Docker-Bridge-IPs (172.x) dabei.
+webrtcIPsFromInterfaces: true
+
+# UDP ICE mux Port.
+webrtcLocalUDPAddress: :8189
+
+webrtcHandshakeTimeout: 60s
+
+webrtcAllowOrigins:
+  - "*"
+
+###############################################################################
+# Auth
+# localhost:8080 = control-server (Docker-Port-Mapping auf Host)
+###############################################################################
+authMethod: http
+authHTTPAddress: http://127.0.0.1:8080/internal/media/auth
+
+###############################################################################
+# Paths
+###############################################################################
+paths:
+  "~^vehicle-.*":

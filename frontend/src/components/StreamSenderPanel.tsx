@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useWHIPSender, type SourceType } from '@/hooks/useWHIPSender'
 
 const STATUS_BADGE: Record<string, string> = {
@@ -19,6 +19,13 @@ export function StreamSenderPanel() {
   const [streamKey,  setStreamKey]  = useState(
     () => localStorage.getItem('avoc-whip-key') ?? ''
   )
+
+  useEffect(() => {
+    fetch('/api/dev/whip-key')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.streamKey) saveKey(d.streamKey) })
+      .catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveKey = (v: string) => {
     setStreamKey(v)

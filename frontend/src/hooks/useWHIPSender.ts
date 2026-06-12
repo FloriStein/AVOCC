@@ -53,9 +53,17 @@ export function useWHIPSender(previewRef: React.RefObject<HTMLVideoElement | nul
     setCandidates([])
 
     try {
-      const stream = sourceType === 'screen'
-        ? await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
-        : await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      let stream: MediaStream
+      if (sourceType === 'screen') {
+        stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+      } else {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        } catch {
+          // Fallback: video only (microphone blocked or unavailable)
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        }
+      }
 
       streamRef.current = stream
       if (previewRef.current) previewRef.current.srcObject = stream
@@ -85,7 +93,7 @@ export function useWHIPSender(previewRef: React.RefObject<HTMLVideoElement | nul
       // ICE-Gathering abwarten (max 5s) — MediaMTX erwartet alle Candidates im initialen WHIP-POST
       await new Promise<void>(resolve => {
         if (pc.iceGatheringState === 'complete') { resolve(); return }
-        const tid = setTimeout(resolve, 5000)
+        const tid = setTimeout(resolve, 2000)
         pc.onicegatheringstatechange = () => {
           if (pc.iceGatheringState === 'complete') { clearTimeout(tid); resolve() }
         }
@@ -119,9 +127,15 @@ export function useWHIPSender(previewRef: React.RefObject<HTMLVideoElement | nul
       await pc.setRemoteDescription({ type: 'answer', sdp: await res.text() })
 
     } catch (err) {
+      // Cleanup resources without calling stop() — stop() would overwrite 'error' status and clear the message
+      pcRef.current?.close()
+      pcRef.current = null
+      streamRef.current?.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+      if (previewRef.current) previewRef.current.srcObject = null
+      setCandidates([])
       setStatus('error')
       setError(err instanceof Error ? err.message : String(err))
-      stop()
     }
   }, [previewRef, stop])
 
