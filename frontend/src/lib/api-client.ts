@@ -26,10 +26,10 @@ export async function getState(): Promise<SystemStateResponse> {
   return res.json()
 }
 
-export async function startSession(vehicleId: string, operatorId: string): Promise<string> {
+export async function startSession(vehicleId: string, operatorId: string, token: string): Promise<string> {
   const res = await fetch('/api/session/start', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
     body: JSON.stringify({
       vehicle_id: vehicleId,
       operator_id: operatorId,
@@ -41,14 +41,17 @@ export async function startSession(vehicleId: string, operatorId: string): Promi
   return session_id as string
 }
 
-export async function endSession(): Promise<void> {
-  await fetch('/api/session/end', { method: 'POST' })
+export async function endSession(token: string): Promise<void> {
+  await fetch('/api/session/end', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` },
+  })
 }
 
-export async function emergencyStop(sessionId: string, vehicleId: string): Promise<void> {
+export async function emergencyStop(sessionId: string, vehicleId: string, token: string): Promise<void> {
   await fetch('/api/emergency-stop', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
     body: JSON.stringify({
       session_id: sessionId,
       vehicle_id: vehicleId,
@@ -72,10 +75,10 @@ export async function listVehicles(): Promise<VehicleInfo[]> {
 
 // Reports WebRTC MEDIA STATE changes to the Control Server (ADR-009 Invariant 1).
 // MEDIA_FAILED → DEGRADED on server side — never SAFE_MODE.
-export async function reportMediaState(state: string): Promise<void> {
+export async function reportMediaState(state: string, token: string): Promise<void> {
   await fetch('/api/media/event', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
     body: JSON.stringify({ state }),
   })
 }

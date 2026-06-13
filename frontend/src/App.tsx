@@ -118,6 +118,7 @@ export default function App() {
           sessionId={session.sessionId}
           vehicleId={session.vehicleId}
           wsClient={session.wsClient}
+          token={session.token}
         />
 
         {/* Connection + Telemetry + Vehicle Selector */}

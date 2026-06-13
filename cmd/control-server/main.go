@@ -3,10 +3,13 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/golang-jwt/jwt/v5"
 
 	"avoc/internal/controlserver/command"
 	csafety "avoc/internal/controlserver/safety"
@@ -106,8 +109,10 @@ func main() {
 	mux.HandleFunc("/ws", wsHandler.ServeWS)
 	mux.HandleFunc("/vehicle/ws", vehicleHandler.ServeWS)
 
+	auth := requireJWT([]byte(secret))
+
 	// Session lifecycle (GSA — ADR-015)
-	mux.HandleFunc("POST /session/start", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /session/start", auth(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			VehicleID    string `json:"vehicle_id"`
 			OperatorID   string `json:"operator_id"`
@@ -132,9 +137,9 @@ func main() {
 			"session_id", sess.ID, "vehicle_id", sess.VehicleID, "operator_id", sess.OperatorID)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"session_id": sess.ID})
-	})
+	}))
 
-	mux.HandleFunc("POST /session/end", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("POST /session/end", auth(func(w http.ResponseWriter, _ *http.Request) {
 		if sess, ok := sessionMgr.GetCurrentSession(); ok {
 			recorder.EndSession(sess.ID)
 			log.Event(logger.EventSessionEnded, "session ended", "session_id", sess.ID)
@@ -143,10 +148,10 @@ func main() {
 		sessionMgr.EndSession()
 		sm.TransitionOperator(statemachine.OpNoOperator)
 		w.WriteHeader(http.StatusNoContent)
-	})
+	}))
 
 	// Operator Handover (BE-12)
-	mux.HandleFunc("POST /handover/request", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /handover/request", auth(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			FromOperatorID string `json:"from_operator_id"`
 			ToOperatorID   string `json:"to_operator_id"`
@@ -160,9 +165,9 @@ func main() {
 			return
 		}
 		w.WriteHeader(http.StatusAccepted)
-	})
+	}))
 
-	mux.HandleFunc("POST /handover/confirm", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /handover/confirm", auth(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			OperatorID string `json:"operator_id"`
 		}
@@ -175,15 +180,15 @@ func main() {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-	})
+	}))
 
-	mux.HandleFunc("POST /handover/cancel", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("POST /handover/cancel", auth(func(w http.ResponseWriter, _ *http.Request) {
 		handoverMgr.CancelHandover()
 		w.WriteHeader(http.StatusOK)
-	})
+	}))
 
 	// MEDIA STATE update (ADR-009/011 Invariant 1)
-	mux.HandleFunc("POST /media/event", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /media/event", auth(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			State string `json:"state"`
 		}
@@ -207,10 +212,10 @@ func main() {
 			return
 		}
 		w.WriteHeader(http.StatusAccepted)
-	})
+	}))
 
 	// Emergency Stop proxy (ADR-009)
-	mux.HandleFunc("POST /emergency-stop", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /emergency-stop", auth(func(w http.ResponseWriter, r *http.Request) {
 		sess, _ := sessionMgr.GetCurrentSession()
 		safetyPub.TriggerEmergencyStop(sess.ID, sess.VehicleID, "operator emergency stop")
 		sm.TransitionSystem(statemachine.StateSafeMode)
@@ -222,7 +227,7 @@ func main() {
 			go mtxClient.KickVehicle(sess.VehicleID)
 		}
 		w.WriteHeader(http.StatusAccepted)
-	})
+	}))
 
 	// LOG-07: Frontend log ingestion — Browser → POST /log → slog (service="frontend") → Loki
 	mux.HandleFunc("POST /log", func(w http.ResponseWriter, r *http.Request) {
@@ -254,7 +259,7 @@ func main() {
 	})
 
 	// LOG-11: Audit events query endpoint
-	mux.HandleFunc("GET /audit/events", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /audit/events", auth(func(w http.ResponseWriter, r *http.Request) {
 		sessionID := r.URL.Query().Get("session_id")
 		if sessionID == "" {
 			http.Error(w, "session_id required", http.StatusBadRequest)
@@ -268,10 +273,10 @@ func main() {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(events)
-	})
+	}))
 
 	// Recording inspection (ADR-005)
-	mux.HandleFunc("GET /recording/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /recording/", auth(func(w http.ResponseWriter, r *http.Request) {
 		sessionID := strings.TrimPrefix(r.URL.Path, "/recording/")
 		if sessionID == "" {
 			http.Error(w, "session_id required", http.StatusBadRequest)
@@ -284,7 +289,7 @@ func main() {
 			"count":      len(entries),
 			"entries":    entries,
 		})
-	})
+	}))
 
 	// MediaMTX Auth-Hook (ADR-020) — validiert WHIP publish + WHEP read
 	// MediaMTX ruft diesen Endpoint für jeden eingehenden WHIP/WHEP-Request auf.
@@ -382,7 +387,7 @@ func main() {
 		json.NewEncoder(w).Encode(result)
 	})
 
-	mux.HandleFunc("POST /vehicles", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /vehicles", auth(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			ID          string `json:"id"`
 			DisplayName string `json:"display_name"`
@@ -410,9 +415,9 @@ func main() {
 			return
 		}
 		w.WriteHeader(http.StatusCreated)
-	})
+	}))
 
-	mux.HandleFunc("DELETE /vehicles/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("DELETE /vehicles/{id}", auth(func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		if id == "" {
 			http.Error(w, "id required", http.StatusBadRequest)
@@ -431,7 +436,7 @@ func main() {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
-	})
+	}))
 
 	// State + Health
 	mux.HandleFunc("GET /state", func(w http.ResponseWriter, _ *http.Request) {
@@ -485,4 +490,30 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// requireJWT returns middleware that enforces a valid operator JWT in the Authorization header.
+// Returns 401 when the token is missing, malformed, or signed with a different secret.
+func requireJWT(secret []byte) func(http.HandlerFunc) http.HandlerFunc {
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			authHeader := r.Header.Get("Authorization")
+			if !strings.HasPrefix(authHeader, "Bearer ") {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			token, err := jwt.Parse(strings.TrimPrefix(authHeader, "Bearer "),
+				func(t *jwt.Token) (any, error) {
+					if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+						return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+					}
+					return secret, nil
+				})
+			if err != nil || !token.Valid {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			next(w, r)
+		}
+	}
 }

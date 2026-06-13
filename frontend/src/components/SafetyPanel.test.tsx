@@ -23,32 +23,32 @@ describe('SafetyPanel', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
   it('zeigt Emergency Stop Button', () => {
-    render(<SafetyPanel systemState="CONNECTED" sessionId="sess-1" vehicleId={null} wsClient={null} />)
+    render(<SafetyPanel systemState="CONNECTED" sessionId="sess-1" vehicleId={null} wsClient={null} token={null} />)
     expect(screen.getByRole('button', { name: /emergency stop/i })).toBeInTheDocument()
   })
 
   it('Emergency Stop Button ist disabled wenn SAFE_MODE', () => {
-    render(<SafetyPanel systemState="SAFE_MODE" sessionId="sess-1" vehicleId={null} wsClient={null} />)
+    render(<SafetyPanel systemState="SAFE_MODE" sessionId="sess-1" vehicleId={null} wsClient={null} token={null} />)
     expect(screen.getByRole('button', { name: /emergency stop/i })).toBeDisabled()
   })
 
   it('Emergency Stop Button ist disabled wenn nicht CONNECTED', () => {
-    render(<SafetyPanel systemState="IDLE" sessionId={null} vehicleId={null} wsClient={null} />)
+    render(<SafetyPanel systemState="IDLE" sessionId={null} vehicleId={null} wsClient={null} token={null} />)
     expect(screen.getByRole('button', { name: /emergency stop/i })).toBeDisabled()
   })
 
   it('Emergency Stop Button ist aktiv wenn CONNECTED', () => {
-    render(<SafetyPanel systemState="CONNECTED" sessionId="sess-1" vehicleId={null} wsClient={null} />)
+    render(<SafetyPanel systemState="CONNECTED" sessionId="sess-1" vehicleId={null} wsClient={null} token={null} />)
     expect(screen.getByRole('button', { name: /emergency stop/i })).not.toBeDisabled()
   })
 
   it('Dead-man Switch Button ist sichtbar', () => {
-    render(<SafetyPanel systemState="CONNECTED" sessionId="sess-1" vehicleId={null} wsClient={null} />)
+    render(<SafetyPanel systemState="CONNECTED" sessionId="sess-1" vehicleId={null} wsClient={null} token={null} />)
     expect(screen.getByText(/Hold|Spacebar|HOLD/i)).toBeInTheDocument()
   })
 
   it('zeigt DEGRADED-Warnung wenn DEGRADED', () => {
-    render(<SafetyPanel systemState="DEGRADED" sessionId="sess-1" vehicleId={null} wsClient={null} />)
+    render(<SafetyPanel systemState="DEGRADED" sessionId="sess-1" vehicleId={null} wsClient={null} token={null} />)
     expect(screen.getByText(/DEGRADED/i)).toBeInTheDocument()
   })
 })

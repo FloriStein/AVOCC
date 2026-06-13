@@ -53,23 +53,25 @@ export function useSession(): SessionState {
 
   // Called by VehicleSelector when the operator clicks "Session starten".
   const startSessionFn = useCallback(async (vid: string) => {
+    if (!token) return
     try {
-      const sid = await startSession(vid, OPERATOR_ID)
+      const sid = await startSession(vid, OPERATOR_ID, token)
       setSessionId(sid)
       setVehicleId(vid)
       reconnectAttempt.current = 0
     } catch {
       // caller can retry
     }
-  }, [])
+  }, [token])
 
   // Called when operator deliberately ends a session to pick a different vehicle.
   // vehicleId is intentionally kept so VehicleSelector can pre-select it on remount.
   // Backend transitions to SAFE_MODE — operator must use Resume to return to AUTHENTICATED.
   const endSessionFn = useCallback(async () => {
-    await endSessionAPI()
+    if (!token) return
+    await endSessionAPI(token)
     setSessionId(null)
-  }, [])
+  }, [token])
 
   // Resume after SAFE_MODE: silently close old WS (no onClose callback) and reconnect.
   const resume = useCallback(async () => {

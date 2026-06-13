@@ -12,11 +12,12 @@ interface Props {
   sessionId: string | null
   vehicleId: string | null
   wsClient: WSClient | null
+  token: string | null
 }
 
 const OPERATOR_ID = 'operator-1'
 
-export function SafetyPanel({ systemState, sessionId, vehicleId, wsClient }: Props) {
+export function SafetyPanel({ systemState, sessionId, vehicleId, wsClient, token }: Props) {
   const isConnected = systemState === 'CONNECTED' || systemState === 'DEGRADED'
   const isSafeMode = systemState === 'SAFE_MODE'
 
@@ -29,11 +30,11 @@ export function SafetyPanel({ systemState, sessionId, vehicleId, wsClient }: Pro
   )
 
   const handleEmergencyStop = async () => {
-    if (isSafeMode) return
+    if (isSafeMode || !token) return
     logEvent(FE_EMERGENCY_STOP, 'Emergency Stop clicked',
       { sessionId: sessionId ?? '', vehicleId: vehicleId ?? '', operatorId: OPERATOR_ID })
     try {
-      await emergencyStop(sessionId ?? '', vehicleId ?? '')
+      await emergencyStop(sessionId ?? '', vehicleId ?? '', token)
     } catch {
       // state polling will detect SAFE_MODE regardless
     }
