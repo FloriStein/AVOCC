@@ -54,11 +54,16 @@ get_secure() {
     --output text
 }
 
-echo "[1/4] Lade Secrets aus SSM Parameter Store..."
+echo "[1/4] Lade Secrets..."
+
+# DB_PASSWORD + ADMIN_PASSWORD kommen aus $APP_DIR/.env (docker-compose liest sie automatisch).
+# Alle anderen Secrets kommen aus AWS SSM Parameter Store.
+ENV_FILE="$APP_DIR/.env"
+if [ ! -f "$ENV_FILE" ]; then
+  echo "ERROR: $ENV_FILE fehlt — bitte DB_PASSWORD und ADMIN_PASSWORD dort eintragen." && exit 1
+fi
 
 export JWT_SECRET=$(get_secure          /avoc/prod/jwt-secret)
-export DB_PASSWORD=$(get_secure         /avoc/prod/db-password)
-export ADMIN_PASSWORD=$(get_secure      /avoc/prod/admin-password)
 export WHIP_STREAM_KEY=$(get_secure     /avoc/prod/whip-stream-key)
 export TURN_EXTERNAL_IP=$(get           /avoc/prod/turn-external-ip)
 export TURN_REALM=$(get                 /avoc/prod/turn-realm)
@@ -79,10 +84,10 @@ export TURN_PRIVATE_IP=$(curl -sf -H "X-aws-ec2-metadata-token: ${_IMDS_TOKEN}" 
 export REGISTRY="docker.io/${DOCKER_USERNAME}"
 export VERSION
 
-echo "  JWT_SECRET          loaded"
-echo "  DB_PASSWORD         loaded"
-echo "  ADMIN_PASSWORD      loaded"
-echo "  WHIP_STREAM_KEY     loaded"
+echo "  JWT_SECRET          loaded (SSM)"
+echo "  DB_PASSWORD         from .env"
+echo "  ADMIN_PASSWORD      from .env"
+echo "  WHIP_STREAM_KEY     loaded (SSM)"
 echo "  TURN_EXTERNAL_IP    ${TURN_EXTERNAL_IP}"
 echo "  TURN_PRIVATE_IP     ${TURN_PRIVATE_IP}"
 echo "  TURN_REALM          ${TURN_REALM}"
