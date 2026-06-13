@@ -48,6 +48,7 @@ export default function App() {
   const isConnected =
     state.system === "CONNECTED" || state.system === "DEGRADED";
   const isSafeMode = state.system === "SAFE_MODE";
+  const isUnreachable = state.unreachable;
 
   // Auto-connect on app load
   useEffect(() => {
@@ -93,6 +94,13 @@ export default function App() {
           <SystemStateBadge state={state.system} />
         </div>
       </header>
+
+      {/* UNREACHABLE banner — backend nicht erreichbar */}
+      {isUnreachable && (
+        <div className="bg-red-950 border-b border-red-700 px-6 py-2 text-red-300 text-sm text-center font-semibold">
+          ✕ Backend nicht erreichbar — Steuerung blockiert. Verbindung wird wiederhergestellt…
+        </div>
+      )}
 
       {/* DEGRADED banner */}
       {state.system === "DEGRADED" && (
@@ -143,7 +151,7 @@ export default function App() {
           wsClient={session.wsClient}
           sessionId={session.sessionId}
           vehicleId={session.vehicleId}
-          enabled={isConnected}
+          enabled={isConnected && !isUnreachable}
         />
         <InputIndicatorPanel telemetry={telemetry} ack={vehicleAck} />
       </footer>
