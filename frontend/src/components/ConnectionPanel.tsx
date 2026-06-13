@@ -15,6 +15,7 @@ interface Props {
   sessionId: string | null
   vehicleId: string | null
   latency: number
+  videoLatency?: number | null
   telemetry?: TelemetryData | null
   onStartSession?: (vehicleId: string) => void
   onEndSession?: () => Promise<void>
@@ -46,7 +47,7 @@ function LatencyColor(ms: number): string {
   return 'text-red-400'
 }
 
-export function ConnectionPanel({ systemState, operatorState, sessionId, vehicleId, latency, telemetry, onStartSession, onEndSession }: Props) {
+export function ConnectionPanel({ systemState, operatorState, sessionId, vehicleId, latency, videoLatency, telemetry, onStartSession, onEndSession }: Props) {
   const shortId = sessionId ? sessionId.slice(0, 8) + '…' : '—'
   const [ending, setEnding] = useState(false)
 
@@ -72,9 +73,16 @@ export function ConnectionPanel({ systemState, operatorState, sessionId, vehicle
       </div>
 
       <div className="flex justify-between text-sm items-center">
-        <span className="text-gray-400">Latency</span>
+        <span className="text-gray-400">Control</span>
         <span className={`font-mono text-sm ${LatencyColor(latency)}`}>
           {latency > 0 ? `${latency} ms` : '— ms'}
+        </span>
+      </div>
+
+      <div className="flex justify-between text-sm items-center">
+        <span className="text-gray-400">Video</span>
+        <span className={`font-mono text-sm ${videoLatency !== null && videoLatency !== undefined ? LatencyColor(videoLatency) : 'text-gray-500'}`}>
+          {videoLatency !== null && videoLatency !== undefined ? `${videoLatency} ms` : '— ms'}
         </span>
       </div>
 

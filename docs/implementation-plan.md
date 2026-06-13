@@ -1,13 +1,13 @@
 # Implementation Plan — Teleoperation System
 
-Stand: 2026-06-12
-Status: Phase 1–12 abgeschlossen ✅ · Sprint 12 abgeschlossen · 22 ADRs · Go Build + 26 Unit Tests + 41 Frontend Tests grün
+Stand: 2026-06-14
+Status: Phase 1–13 abgeschlossen ✅ · Phase 14 in Bearbeitung 🔄 · 22 ADRs · Go Build + 26 Unit Tests + 41 Frontend Tests grün
 
 ---
 
 ## 1. Executive Summary
 
-Wir bauen ein sicheres, modulares Echtzeit-Teleoperation-System zur Fernsteuerung von Fahrzeugen über das offene Internet (Vehicle ↔ Internet ↔ OCC, uncontrolled routing). Die Architektur ist durch 22 ADRs entschieden. Nach 12 Sprints ist das System vollständig implementiert: Frontend, Backend, Video-Channel (MediaMTX WHIP/WHEP, ADR-020), Test-Infrastruktur, Logging (ADR-017/018), Browser-ICE-Migration (Sprint 10), Vehicle Connectivity & Feedback (Sprint 11, ADR-021), sowie Vehicle Registry (Sprint 12, ADR-022): Mehrere Fahrzeuge werden in SQLite verwaltet, der Operator wählt vor Session-Start über den VehicleSelector aus, `vehicle-001` wird auto-geseedet.
+Wir bauen ein sicheres, modulares Echtzeit-Teleoperation-System zur Fernsteuerung von Fahrzeugen über das offene Internet (Vehicle ↔ Internet ↔ OCC, uncontrolled routing). Die Architektur ist durch 22 ADRs entschieden. Nach 13 abgeschlossenen Sprints ist das System vollständig implementiert: Frontend, Backend, Video-Channel (MediaMTX WHIP/WHEP, ADR-020), Test-Infrastruktur, Logging (ADR-017/018), Browser-ICE-Migration (Sprint 10), Vehicle Connectivity & Feedback (Sprint 11, ADR-021), sowie Vehicle Registry (Sprint 12, ADR-022). Sprint 14 fügt Security & Observability hinzu: JWT-Pflicht auf 9 REST-Endpoints (`requireJWT` Middleware), Backend-Unreachable-Banner mit ControlPanel-Sperre, und Dual-Channel-Latenzanzeige (Control WS-ACK + Video WebRTC ICE-RTT).
 
 **Nicht-Verhandelbar:**
 - Safety First — SAFE MODE ist nicht überbrückbar, Video darf SAFE MODE nie triggern
@@ -393,7 +393,7 @@ Control Server als einzige Auth- und SAFE_MODE-Kontrollinstanz über MediaMTX.
 ## 9. Vollständige Task-Übersicht
 
 ```
-12 Epics — Phase 1–12 abgeschlossen ✅
+14 Phasen — Phase 1–13 abgeschlossen ✅ · Phase 14 in Bearbeitung 🔄
 
 Phase 1  ✅ (Sprint 1):  INFRA-01, FE-01, BE-01, BE-02, BE-03, BE-11, DC-01, DC-02, DC-03
 Phase 2  ✅:             BE-06, BE-09, BE-10, BE-12, TEST-01, TEST-02
@@ -407,6 +407,8 @@ Phase 9  ✅ (Sprint 9):  STREAM-01..09
 Phase 10 ✅ (Sprint 10): WEBRTC-01..11 (E2E Smoke Test Browser WHIP → WHEP bestätigt)
 Phase 11 ✅ (Sprint 11): VEH-01..12 (Go Build + 26 Unit Tests + 41 Frontend Tests grün)
 Phase 12 ✅ (Sprint 12): VEH-REG-01..08 (ADR-022; SQLite vehicles-Tabelle; VehicleSelector; 22 ADRs)
+Phase 13 ✅ (Sprint 13): DEV-01..03 (nginx.dev.conf; vehicle-mock Makefile; session_id Log-Korrelation)
+Phase 14 🔄 (Sprint 14): AUTH-01 ✅ ROB-01 ✅ UI-01 ✅ OBS-01 🔲 (Bonus)
 ```
 
 ---
@@ -452,6 +454,19 @@ Referenz: [`docs/sprints/sprint-11-vehicle-connectivity.md`](sprints/sprint-11-v
 | VEH-11 | `InputIndicatorPanel.tsx` — SteeringWheel SVG + ActuationBar + AckBadge | M | VEH-10, VEH-03 |
 | VEH-12 | Tests: `vehicleconnection_test.go` (7) + `InputIndicatorPanel.test.tsx` (7) | M | VEH-04, VEH-05, VEH-11 |
 
+### Phase 14 — Security & Observability 🔄 *(Sprint 14, in Bearbeitung seit 2026-06-13)*
+
+**Ziel:** REST-API JWT-geschützt. Frontend signalisiert Backend-Ausfall zuverlässig. Control- und Video-Kanal werden separat mit Latenz dargestellt.
+
+| ID | Task | Typ | Status |
+|----|------|-----|--------|
+| AUTH-01 | `requireJWT` Middleware (curried `http.HandlerFunc`-Wrapper, HMAC-Validierung) — 11 REST-Endpoints geschützt; `POST /log` bewusst offen (Pre-Login-Logging); Frontend `api-client.ts` + `SafetyPanel.tsx` token-aware | M | ✅ |
+| ROB-01 | `useSystemState.ts`: `failCount` Ref, `UNREACHABLE_THRESHOLD=3` (1,5s) → `unreachable: boolean`; `App.tsx`: rotes Banner + `ControlPanel disabled` | S | ✅ |
+| UI-01 | `useWebRTC.ts`: `getStats()` 1s-Intervall, ICE `candidate-pair` RTT → `videoLatencyMs`; `VideoPanel.tsx` `onVideoLatency`-Callback; `ConnectionPanel.tsx`: zwei Zeilen Control + Video | M | ✅ |
+| OBS-01 | Vehicle "zuletzt gesehen" Heartbeat-Timestamp in AckBadge | S | 🔲 |
+
+**Nachtrag Bugfix (vor Sprint-Start):** `WSClient.disconnect()` setzt `ws.onclose = null` vor `ws.close()` → Emergency-Stop Race Condition behoben (Intentional-Disconnect löste nie Reconnect aus).
+
 ---
 
 ## 10. Offene Folge-Entscheidungen
@@ -465,6 +480,7 @@ Referenz: [`docs/sprints/sprint-11-vehicle-connectivity.md`](sprints/sprint-11-v
 | Migration zu AWS ECR | offen | ADR-019 Folge — für Produktivbetrieb |
 | MQTT-Authentifizierung (Mosquitto Passwort-File) | offen | Port 1883 aktuell ohne Auth offen |
 | E2E Smoke Test (5G TURN-Relay) | offen | WEBRTC-09 — Browser WHIP E2E (WiFi) bestätigt; TURN-Relay auf 5G/LTE noch ausstehend |
+| OBS-01 Vehicle Heartbeat | offen | Sprint-14-Bonus — AckBadge "zuletzt gesehen" Timestamp |
 
 ---
 

@@ -41,11 +41,14 @@ Vollständige Live-Übersicht: [DECISIONS.MD](../../DECISIONS.MD)
 | Thema | Blockiert | Referenz |
 |-------|-----------|----------|
 | Prioritätsmodell technisch (Channels vs. Header-Flag) | offen | ADR-008 Folge |
-| Session Recording Storage (DB/Files/Object Storage) | nach Sprint 9 | ADR-005 Folge — MemoryRecorder aktiv seit Sprint 4 |
+| Session Recording Storage (DB/Files/Object Storage) | offen | ADR-005 Folge — MemoryRecorder aktiv seit Sprint 4 |
 | DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
-| Backup-Strategie Audit Store (SQLite → S3) | nach Sprint 9 | ADR-018 Folge — S3-Bucket im CDK vorhanden |
-| HTTPS / TLS-Terminierung auf EC2 | nach Sprint 9 | ADR-019 Folge — für Testphase HTTP akzeptabel |
-| Multi-Vehicle vehicleId-Routing in MediaMTX | ✅ entschieden ADR-022 | VehicleSelector + SQLite-Registry; `~^vehicle-.*`-Regex in MediaMTX aktiv |
+| Backup-Strategie Audit Store (SQLite → S3) | offen | ADR-018 Folge — S3-Bucket im CDK vorhanden |
+| HTTPS / TLS-Terminierung auf EC2 | ✅ Sprint 10 | nginx SSL + Self-Signed Cert via deploy.sh implementiert |
+| Multi-Vehicle vehicleId-Routing in MediaMTX | ✅ ADR-022 | VehicleSelector + SQLite-Registry; `~^vehicle-.*`-Regex in MediaMTX aktiv |
+| JWT-Schutz REST-Endpoints | ✅ Sprint 14 | `requireJWT` Middleware, 9 Endpoints geschützt |
+| E2E Smoke Test 5G TURN-Relay | offen | WEBRTC-09 Rest |
+| OBS-01 Vehicle Heartbeat | offen | Sprint-14-Bonus — AckBadge "zuletzt gesehen" Timestamp |
 
 ---
 

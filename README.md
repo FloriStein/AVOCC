@@ -80,7 +80,7 @@ make test-latency       # Go Benchmark ACK-Roundtrip <100ms (ADR-010 Build-Fail)
 make test-k6            # k6 Load Test 10 VU / 30s (benötigt Docker)
 
 # Frontend Tests
-cd frontend && npm test           # Vitest Component-Tests (31 Tests)
+cd frontend && npm test           # Vitest Component-Tests (41 Tests)
 cd frontend && npm run test:e2e   # Playwright E2E (benötigt laufenden Stack)
 
 # Stack stoppen
@@ -188,7 +188,7 @@ docker compose -f tests/docker-compose.test.yml down
 
 ## Implementierungsstand
 
-**Phasen 1–12 abgeschlossen ✅**
+**Phasen 1–13 abgeschlossen ✅ · Phase 14 in Bearbeitung 🔄**
 
 | Feature | Implementiert |
 |---------|--------------|
@@ -219,6 +219,8 @@ docker compose -f tests/docker-compose.test.yml down
 
 **Sprint 13 (Dev-Stack Stabilisierung & Log-Korrelation) ✅:** `nginx.dev.conf` HTTP-only (`make up` ohne SSL-Fehler) · vehicle-mock in Makefile build-prod/push · `session_id` in TelemetryEvent + VehicleCommandAck propagiert
 
+**Sprint 14 (Security & Observability) 🔄:** JWT-Pflicht auf 9 REST-Endpoints (`requireJWT` Middleware) · Backend-nicht-erreichbar-Banner + ControlPanel-Sperre (`useSystemState` `unreachable`) · Dual-Channel-Latenzanzeige: Control (WS-ACK) + Video (WebRTC ICE-RTT) in ConnectionPanel · E-Stop Race Condition (WSClient reconnect) behoben
+
 ---
 
 ## Sprint-Stand
@@ -238,16 +240,17 @@ docker compose -f tests/docker-compose.test.yml down
 | Sprint 11 | Vehicle Connectivity & Feedback — WS-Forwarding, ACK, vehicle-mock, InputIndicatorPanel | ✅ |
 | Sprint 12 | Vehicle Registry — SQLite `vehicles`, VehicleSelector UI, ADR-022 | ✅ |
 | Sprint 13 | Dev-Stack Stabilisierung & Log-Korrelation — nginx.dev.conf, vehicle-mock Makefile, session_id | ✅ |
+| Sprint 14 | Security & Observability — JWT REST-Auth, Backend-Unreachable-Banner, Dual-Channel-Latenz | 🔄 |
 
-→ Abgeschlossen: alle 13 Sprints | Backlog: [tasks/backlog.md](tasks/backlog.md)
+→ Abgeschlossen: 13 Sprints | Sprint 14 in Bearbeitung | Backlog: [tasks/backlog.md](tasks/backlog.md)
 
 ---
 
-## ADR-Übersicht (20 Entscheidungen)
+## ADR-Übersicht (22 Entscheidungen)
 
 Alle Architekturentscheidungen sind dokumentiert und unveränderlich. Neue Erkenntnisse führen zu einem neuen ADR.
 
-Zuletzt hinzugefügt: [ADR-019](docs/adr/019-deployment-strategy.md) (EC2 Deployment via Docker Hub) · [ADR-020](docs/adr/020-mediamtx-whip-whep.md) (MediaMTX WHIP/WHEP Router)
+Zuletzt hinzugefügt: [ADR-021](docs/adr/021-vehicle-connectivity-feedback.md) (Vehicle Connectivity & Feedback) · [ADR-022](docs/adr/022-vehicle-registry.md) (Vehicle Registry)
 
 → [docs/adr/README.md](docs/adr/README.md) | Live-Übersicht: [DECISIONS.MD](DECISIONS.MD)
 

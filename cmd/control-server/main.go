@@ -21,6 +21,7 @@ import (
 	"avoc/internal/vehicleconnection"
 	"avoc/internal/vehicleregistry"
 	"avoc/pkg/audit"
+	pkgdb "avoc/pkg/db"
 	"avoc/pkg/logger"
 	"avoc/pkg/ulid"
 )
@@ -48,17 +49,27 @@ func main() {
 	turnPassword := os.Getenv("TURN_PASSWORD")
 	mtxClient := mediamtx.NewClient(mediamtxAPIURL)
 
-	// --- Audit Writer (LOG-10/11 — ADR-018) ---
-	dbPath := envOr("AUDIT_DB_PATH", "/data/audit/avoc_audit.db")
-	var auditWriter audit.AuditWriter
-	sqliteWriter, err := audit.NewSQLiteAuditWriter(dbPath)
+	// --- PostgreSQL (ADR-023) ---
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		log.Fatal("DATABASE_URL environment variable is required")
+	}
+	db, err := pkgdb.Open(databaseURL)
 	if err != nil {
-		log.Warn("audit store unavailable — using NoopWriter", "error", err, "path", dbPath)
+		log.Fatal("failed to open database", "error", err)
+	}
+	defer db.Close()
+
+	// --- Audit Writer (LOG-10/11 — ADR-018/023) ---
+	var auditWriter audit.AuditWriter
+	pgWriter, err := audit.NewPostgresAuditWriter(db)
+	if err != nil {
+		log.Warn("audit store unavailable — using NoopWriter", "error", err)
 		auditWriter = audit.NewNoopWriter()
 	} else {
-		auditWriter = sqliteWriter
-		defer sqliteWriter.Close()
-		log.Info("audit store ready", "path", dbPath)
+		auditWriter = pgWriter
+		defer pgWriter.Close()
+		log.Info("audit store ready (PostgreSQL)")
 	}
 
 	// --- Core components ---
@@ -75,23 +86,19 @@ func main() {
 	vehicleRegistry := vehicleconnection.NewRegistry()
 	vehicleAckStore := vehicleconnection.NewAckStore()
 
-	// --- Vehicle Registry (ADR-022) ---
+	// --- Vehicle Registry (ADR-022/023) ---
 	var vehicleStore vehicleregistry.VehicleStore
-	if sqliteWriter != nil {
-		vs, vsErr := vehicleregistry.NewSQLiteVehicleStore(sqliteWriter.DB(), vehicleRegistry)
-		if vsErr != nil {
-			log.Warn("vehicle registry unavailable", "error", vsErr)
-			vehicleStore = vehicleregistry.NoopVehicleStore{}
-		} else {
-			vehicleStore = vs
-			if seedErr := vs.SeedDefault(); seedErr != nil {
-				log.Warn("vehicle registry seed failed", "error", seedErr)
-			} else {
-				log.Info("vehicle registry ready, vehicle-001 seeded")
-			}
-		}
-	} else {
+	vs, vsErr := vehicleregistry.NewPostgresVehicleStore(db, vehicleRegistry)
+	if vsErr != nil {
+		log.Warn("vehicle registry unavailable", "error", vsErr)
 		vehicleStore = vehicleregistry.NoopVehicleStore{}
+	} else {
+		vehicleStore = vs
+		if seedErr := vs.SeedDefault(); seedErr != nil {
+			log.Warn("vehicle registry seed failed", "error", seedErr)
+		} else {
+			log.Info("vehicle registry ready, vehicle-001 seeded")
+		}
 	}
 
 	cmdEngine := command.NewEngine(sm, safetyPub, sessionMgr, deadman).

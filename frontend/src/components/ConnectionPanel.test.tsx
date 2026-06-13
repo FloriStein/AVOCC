@@ -26,9 +26,9 @@ describe('ConnectionPanel', () => {
     expect(screen.getByText('01JTXYZA…')).toBeInTheDocument()
   })
 
-  it('zeigt — ms wenn Latenz 0', () => {
+  it('zeigt — ms für Control wenn Latenz 0 und — ms für Video wenn kein videoLatency', () => {
     render(<ConnectionPanel {...baseProps} latency={0} />)
-    expect(screen.getByText('— ms')).toBeInTheDocument()
+    expect(screen.getAllByText('— ms')).toHaveLength(2)
   })
 
   it('zeigt Latenz in ms wenn > 0', () => {

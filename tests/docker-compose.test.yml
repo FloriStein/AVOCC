@@ -6,6 +6,20 @@ name: avoc-test
 
 services:
 
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: avoc
+      POSTGRES_PASSWORD: avoc_test_secret
+      POSTGRES_DB: avoc
+    networks:
+      - avoc-test-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U avoc -d avoc"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
   control-server:
     build:
       context: ..
@@ -20,7 +34,10 @@ services:
       SAFETY_SERVICE_URL: "http://safety-service:8082"
       SFU_SERVICE_URL: "http://localhost:8084"   # SFU läuft nicht im Test-Stack
       AUTH_SERVICE_URL: "http://auth-service:8081"
+      DATABASE_URL: "postgres://avoc:avoc_test_secret@postgres:5432/avoc?sslmode=disable"
     depends_on:
+      postgres:
+        condition: service_healthy
       auth-service:
         condition: service_healthy
       safety-service:
@@ -39,6 +56,11 @@ services:
     environment:
       AUTH_PORT: "8081"
       JWT_SECRET: "test-secret-integration"
+      DATABASE_URL: "postgres://avoc:avoc_test_secret@postgres:5432/avoc?sslmode=disable"
+      ADMIN_PASSWORD: "admin_test_secret"
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8081/health"]
       interval: 3s

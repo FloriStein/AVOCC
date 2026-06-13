@@ -1,6 +1,6 @@
 # Teleoperation System Architecture
 
-Stand: 2026-06-05 (aktualisiert nach ADR-001 bis ADR-020)
+Stand: 2026-06-14 (aktualisiert nach ADR-001 bis ADR-022, Sprint 14)
 
 ---
 
@@ -180,6 +180,16 @@ INVARIANT 3: Control Hub is Single Source of Truth for Session State.
 
 ---
 
+## REST API — Authentifizierung (Sprint 14)
+
+Alle schreibenden REST-Endpoints sind durch `requireJWT`-Middleware geschützt (Bearer-Token-Prüfung via `github.com/golang-jwt/jwt/v5`):
+
+**Geschützt (11 Endpoints):** `POST /session/start`, `POST /session/end`, `POST /handover/request`, `POST /handover/confirm`, `POST /handover/cancel`, `POST /media/event`, `POST /emergency-stop`, `GET /audit/events`, `GET /recording/`, `POST /vehicles`, `DELETE /vehicles/{id}`
+
+**Bewusst offen:** `GET /state`, `GET /health`, `GET /vehicles`, `GET /ice-config`, `GET /vehicle/ack/latest/{id}`, `POST /log` — Polling ohne Session-Kontext, nicht-sensitive Lesezugriffe, oder Fire-and-forget Logger (muss vor Login feuern können).
+
+---
+
 ## Control Server — Interne Modulstruktur
 
 Ein Service, 5 logische Module:
@@ -221,11 +231,14 @@ Ein Service, 5 logische Module:
 
 | Komponente | Implementierung | Sprint |
 |------------|----------------|--------|
-| **Video Panel** | `VideoPanel.tsx` + `useWebRTC.ts` — RTCPeerConnection, WHEP-Protokoll via `/whep/{vehicleId}/whep`, ICE non-trickle Gathering, MEDIA STATE Badge, DEGRADED-Overlay | Sprint 5/9 ✅ |
+| **Video Panel** | `VideoPanel.tsx` + `useWebRTC.ts` — RTCPeerConnection, WHEP-Protokoll via `/whep/{vehicleId}/whep`, ICE non-trickle Gathering, MEDIA STATE Badge, DEGRADED-Overlay, `onVideoLatency`-Callback (Sprint 14) | Sprint 5/9/14 ✅ |
 | **Control Panel** | `ControlPanel.tsx` + `useControls.ts` — Keyboard WASD/Pfeiltasten, Virtual Joystick SVG, Gamepad API, Speed Slider, 20 Hz Protobuf Command Loop | Sprint 5 ✅ |
-| **Safety Panel** | `SafetyPanel.tsx` + `useDeadmanSwitch.ts` — Emergency Stop, Dead-man Switch (Spacebar/Button), SAFE MODE Indikator | Sprint 3 ✅ |
-| **Connection Status Panel** | `ConnectionPanel.tsx` — SYSTEM STATE, Latenzanzeige, Session-ID (ULID), Operator-Rolle, Speed/Battery (Telemetrie) | Sprint 3/5 ✅ |
+| **Safety Panel** | `SafetyPanel.tsx` + `useDeadmanSwitch.ts` — Emergency Stop, Dead-man Switch (Spacebar/Button), SAFE MODE Indikator; `token`-Prop (Sprint 14) | Sprint 3/14 ✅ |
+| **Connection Status Panel** | `ConnectionPanel.tsx` — SYSTEM STATE, **Dual-Channel-Latenz: Control (WS-ACK-RTT) + Video (WebRTC ICE-RTT)**, Session-ID (ULID), Operator-Rolle, Speed/Battery (Telemetrie), VehicleSelector (Sprint 12) | Sprint 3/5/12/14 ✅ |
 | **SAFE MODE Overlay** | `SafeModeOverlay.tsx` — Fullscreen-Block, Operator-Ack-Button für Recovery | Sprint 3 ✅ |
+| **Backend-Unreachable-Banner** | `App.tsx` + `useSystemState.ts` — Rotes Banner + ControlPanel-Sperre nach 3 fehlgeschlagenen State-Polls (1,5s) | Sprint 14 ✅ |
+| **Vehicle Selector** | `VehicleSelector.tsx` + `useVehicles.ts` — Dropdown mit Online-Indikator, Session-Start-Button | Sprint 12 ✅ |
+| **Input Indicator Panel** | `InputIndicatorPanel.tsx` + `useVehicleAck.ts` — Lenkrad-SVG, ActuationBars, AckBadge | Sprint 11 ✅ |
 | **Operator Panel** | Handover-Anfrage, Observer-Liste | nicht implementiert (kein eigener Sprint geplant) |
 
 ---

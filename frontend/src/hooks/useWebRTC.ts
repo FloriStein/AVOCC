@@ -34,6 +34,7 @@ export function useWebRTC(sessionId: string | null, vehicleId: string, token: st
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const [mediaState, setMediaState] = useState<MediaState>('MEDIA_INIT')
+  const [videoLatencyMs, setVideoLatencyMs] = useState<number | null>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
 
   const updateState = useCallback((state: MediaState) => {
@@ -146,5 +147,25 @@ export function useWebRTC(sessionId: string | null, vehicleId: string, token: st
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mediaState, enabled, sessionId, token])
 
-  return { videoRef, streamRef, mediaState, connect, disconnect }
+  // Poll WebRTC ICE candidate-pair RTT every second while video is connected.
+  // currentRoundTripTime (seconds) from the nominated candidate-pair gives
+  // the network-level E2E latency for the video channel.
+  useEffect(() => {
+    if (mediaState !== 'MEDIA_CONNECTED') { setVideoLatencyMs(null); return }
+    const pc = pcRef.current
+    if (!pc) return
+    const id = setInterval(async () => {
+      try {
+        const stats = await pc.getStats()
+        stats.forEach(r => {
+          if (r.type === 'candidate-pair' && r.nominated && typeof r.currentRoundTripTime === 'number') {
+            setVideoLatencyMs(Math.round(r.currentRoundTripTime * 1000))
+          }
+        })
+      } catch { /* PC closed */ }
+    }, 1000)
+    return () => clearInterval(id)
+  }, [mediaState])
+
+  return { videoRef, streamRef, mediaState, videoLatencyMs, connect, disconnect }
 }

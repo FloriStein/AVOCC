@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSystemState } from "@/hooks/useSystemState";
 import { useSession } from "@/hooks/useSession";
 import { useTelemetry } from "@/hooks/useTelemetry";
@@ -10,6 +10,9 @@ import { VideoPanel } from "@/components/VideoPanel";
 import { ControlPanel } from "@/components/ControlPanel";
 import { InputIndicatorPanel } from "@/components/InputIndicatorPanel";
 import { StreamSenderPanel } from "@/components/StreamSenderPanel";
+import LoginPanel from "@/components/LoginPanel";
+import UserManagementPanel from "@/components/UserManagementPanel";
+import { parseTokenRole } from "@/lib/api-client";
 
 const STATE_COLORS: Record<string, string> = {
   IDLE: "bg-gray-500",
@@ -43,23 +46,35 @@ export default function App() {
   const session = useSession();
   const telemetry = useTelemetry(session.vehicleId);
   const vehicleAck = useVehicleAck(session.vehicleId);
-  const [showSender, setShowSender] = useState(false);
+  const [showSender, setShowSender] = useState(false)
+  const [videoLatency, setVideoLatency] = useState<number | null>(null);
+  const [showUserMgmt, setShowUserMgmt] = useState(false);
 
   const isConnected =
     state.system === "CONNECTED" || state.system === "DEGRADED";
   const isSafeMode = state.system === "SAFE_MODE";
   const isUnreachable = state.unreachable;
 
-  // Auto-connect on app load
-  useEffect(() => {
-    session.connect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const isAdmin = session.token ? parseTokenRole(session.token) === 'ADMIN' : false;
+
+  // Show login overlay when no token is present
+  if (!session.token) {
+    return <LoginPanel onLogin={session.connect} />
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
       {/* SAFE MODE overlay — blocks everything when system is in SAFE_MODE */}
       {isSafeMode && <SafeModeOverlay onResume={session.resume} />}
+
+      {/* User management overlay — ADMIN only */}
+      {showUserMgmt && session.token && (
+        <UserManagementPanel
+          token={session.token}
+          currentUserId={session.operatorId ?? ''}
+          onClose={() => setShowUserMgmt(false)}
+        />
+      )}
 
       {/* Header */}
       <header className="bg-gray-800 border-b border-gray-700 px-6 py-3 flex items-center justify-between">
@@ -73,6 +88,14 @@ export default function App() {
               {OPERATOR_ROLE_LABEL[state.operator] ?? state.operator}
             </span>
           )}
+          {isAdmin && (
+            <button
+              onClick={() => setShowUserMgmt(true)}
+              className="px-3 py-1 rounded text-xs font-semibold bg-gray-700 hover:bg-gray-600 text-gray-300"
+            >
+              Benutzerverwaltung
+            </button>
+          )}
           <button
             onClick={() => setShowSender(v => !v)}
             className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
@@ -83,14 +106,12 @@ export default function App() {
           >
             ⏺ Senden
           </button>
-          {state.system === "IDLE" && (
-            <button
-              onClick={session.connect}
-              className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded text-sm font-semibold"
-            >
-              Connect
-            </button>
-          )}
+          <button
+            onClick={session.disconnect}
+            className="px-3 py-1 rounded text-xs font-semibold bg-gray-700 hover:bg-gray-600 text-gray-300"
+          >
+            Abmelden
+          </button>
           <SystemStateBadge state={state.system} />
         </div>
       </header>
@@ -118,6 +139,7 @@ export default function App() {
           vehicleId={session.vehicleId ?? ''}
           token={session.token}
           enabled={isConnected}
+          onVideoLatency={setVideoLatency}
         />
 
         {/* Safety Panel */}
@@ -136,6 +158,7 @@ export default function App() {
           sessionId={session.sessionId}
           vehicleId={session.vehicleId}
           latency={session.latency}
+          videoLatency={videoLatency}
           telemetry={telemetry}
           onStartSession={session.startSession}
           onEndSession={session.endSession}

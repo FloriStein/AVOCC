@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useWebRTC } from '@/hooks/useWebRTC'
 import { useMediaRecorder } from '@/hooks/useMediaRecorder'
 
@@ -6,6 +7,7 @@ interface Props {
   vehicleId: string
   token: string | null
   enabled: boolean
+  onVideoLatency?: (ms: number | null) => void
 }
 
 const MEDIA_BADGE: Record<string, string> = {
@@ -16,9 +18,13 @@ const MEDIA_BADGE: Record<string, string> = {
   MEDIA_FAILED:      'bg-red-600',
 }
 
-export function VideoPanel({ sessionId, vehicleId, token, enabled }: Props) {
-  const { videoRef, streamRef, mediaState, connect } = useWebRTC(sessionId, vehicleId, token, enabled)
+export function VideoPanel({ sessionId, vehicleId, token, enabled, onVideoLatency }: Props) {
+  const { videoRef, streamRef, mediaState, videoLatencyMs, connect } = useWebRTC(sessionId, vehicleId, token, enabled)
   const { isRecording, duration, start, stop } = useMediaRecorder(streamRef)
+
+  useEffect(() => {
+    onVideoLatency?.(videoLatencyMs)
+  }, [videoLatencyMs, onVideoLatency])
   const badgeClass = MEDIA_BADGE[mediaState] ?? 'bg-gray-600'
   const canRecord = mediaState === 'MEDIA_CONNECTED'
 

@@ -3,7 +3,7 @@
 Lifecycle: backlog → sprint → done
 Typen: S (<30 Min), M (30–180 Min), L (Architektur, ADR-pflichtig)
 
-Stand: 2026-06-13 — aktualisiert nach Sprint 13 (Dev-Stack Stabilisierung); Sprint 14 angelegt
+Stand: 2026-06-14 — aktualisiert nach Sprint 14 (Security & Observability, AUTH-01/ROB-01/UI-01 ✅)
 
 ---
 
@@ -174,6 +174,19 @@ LOG-10 → LOG-11 (nach LOG-02)
 
 ---
 
+## EPIC: Security & Observability (Sprint 14) 🔄
+
+| ID | Task | Typ | Status | Ergebnis |
+|----|------|-----|--------|----------|
+| AUTH-01 | JWT-Pflicht REST-Endpoints (`requireJWT` Middleware, 9 Endpoints geschützt) | M | ✅ Sprint 14 | `cmd/control-server/main.go`; `api-client.ts` + `SafetyPanel.tsx` token-aware |
+| ROB-01 | Backend nicht erreichbar Banner + ControlPanel-Sperre | S | ✅ Sprint 14 | `useSystemState.ts` `unreachable`; rotes Banner in `App.tsx` |
+| UI-01 | Dual-Channel Status: Control (WS-ACK) + Video (ICE-RTT) in ConnectionPanel | M | ✅ Sprint 14 | `useWebRTC.ts` `getStats()`; `VideoPanel.tsx` Callback; `ConnectionPanel.tsx` 2 Zeilen |
+| OBS-01 | Vehicle "zuletzt gesehen" Heartbeat-Timestamp in AckBadge (Bonus) | S | 🔲 offen | — |
+
+**Nachtrag Bugfix:** `WSClient.disconnect()` setzt `ws.onclose = null` vor `ws.close()` — E-Stop Race Condition behoben.
+
+---
+
 ## Offene Entscheidungen (blockieren zukünftige Tasks)
 
 | Entscheidung | Blockiert | Referenz |
@@ -182,13 +195,10 @@ LOG-10 → LOG-11 (nach LOG-02)
 | DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
 | Backup-Strategie Audit Store (SQLite Volume → S3) | offen | ADR-018 Folge — S3-Bucket im CDK vorhanden |
 | Migration zu AWS ECR | offen | ADR-019 Folge — für Produktivbetrieb |
-| HTTPS / TLS-Terminierung auf EC2 | offen | ADR-019 Folge — für Testphase HTTP akzeptabel |
 | MQTT-Authentifizierung (Mosquitto Passwort-File) | offen | Port 1883 aktuell ohne Auth offen |
 | Multi-Vehicle / vehicleId-Routing in MediaMTX | ✅ ADR-022 | VehicleSelector + SQLite-Registry; `~^vehicle-.*`-Regex aktiv |
 | E2E Smoke Test mit aktiver WHIP-Quelle | offen | WEBRTC-09 Rest — Browser WiFi + 5G ICE-Pair verifizieren |
-| Dev-Stack SSL-Fix: nginx.conf dev/prod trennen | offen | Sprint-10-Regression — `make up` startet Frontend nicht ohne SSL-Cert |
-| vehicle-mock in Makefile GO_SERVICES | offen | build-prod + push übersehen vehicle-mock |
-| session_id in MQTT-TelemetryEvent (vehicle-mock) | offen | Log-Korrelations-Gap: vehicle-mock hat keinen Operator-Session-Kontext |
+| OBS-01 Vehicle Heartbeat | offen | Sprint-14-Bonus — AckBadge "zuletzt gesehen" Timestamp |
 
 ---
 
@@ -219,6 +229,6 @@ Phase 12 — Vehicle Registry ✅ (abgeschlossen 2026-06-12)
 Phase 13 — Dev-Stack Stabilisierung & Log-Korrelation ✅ (abgeschlossen 2026-06-13)
   DEV-01..03 ✅ — nginx.dev.conf HTTP-only; vehicle-mock im Build; session_id in TelemetryEvent
 
-Phase 14 — Security & Observability 🔄 (Sprint 14)
-  AUTH-01, UI-01, ROB-01, OBS-01 (Bonus)
+Phase 14 — Security & Observability 🔄 (Sprint 14, in Bearbeitung)
+  AUTH-01 ✅  ROB-01 ✅  UI-01 ✅  OBS-01 🔲 (Bonus offen)
 ```

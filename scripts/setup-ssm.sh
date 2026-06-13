@@ -72,6 +72,18 @@ if [ ${#grafana_password} -lt 12 ]; then
   echo "ERROR: GRAFANA_ADMIN_PASSWORD muss mindestens 12 Zeichen lang sein." && exit 1
 fi
 
+# PostgreSQL (ADR-023)
+read -rsp "DB_PASSWORD (min. 16 Zeichen — PostgreSQL avoc-User): " db_password; echo ""
+if [ ${#db_password} -lt 16 ]; then
+  echo "ERROR: DB_PASSWORD muss mindestens 16 Zeichen lang sein." && exit 1
+fi
+
+# Admin-User Seed (ADR-024)
+read -rsp "ADMIN_PASSWORD (min. 12 Zeichen — initialer Admin-Account): " admin_password; echo ""
+if [ ${#admin_password} -lt 12 ]; then
+  echo "ERROR: ADMIN_PASSWORD muss mindestens 12 Zeichen lang sein." && exit 1
+fi
+
 # MediaMTX WHIP Stream Key (ADR-020)
 read -rsp "WHIP_STREAM_KEY (min. 32 Zeichen — Bearer Token für Larix): " whip_stream_key; echo ""
 if [ ${#whip_stream_key} -lt 32 ]; then
@@ -94,6 +106,8 @@ echo "Schreibe Parameter nach /avoc/prod/ ..."
 echo ""
 
 put_secure  /avoc/prod/jwt-secret              "$jwt_secret"
+put_secure  /avoc/prod/db-password            "$db_password"
+put_secure  /avoc/prod/admin-password         "$admin_password"
 put_secure  /avoc/prod/whip-stream-key        "$whip_stream_key"
 put_string  /avoc/prod/turn-external-ip        "$turn_external_ip"
 put_string  /avoc/prod/turn-realm              "$turn_realm"

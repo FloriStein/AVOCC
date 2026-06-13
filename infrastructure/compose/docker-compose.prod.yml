@@ -23,6 +23,24 @@ services:
       - avoc-net
     restart: unless-stopped
 
+  # ─── PostgreSQL — primäre Datenbank (ADR-023) ─────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: avoc
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: avoc
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - avoc-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U avoc -d avoc"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   # ─── Control Server ────────────────────────────────────────────────────────
   control-server:
     image: ${REGISTRY}/avoc-control-server:${VERSION}
@@ -34,7 +52,7 @@ services:
       SAFETY_SERVICE_URL: "http://safety-service:8082"
       SFU_SERVICE_URL: "http://webrtc-sfu:8084"
       AUTH_SERVICE_URL: "http://auth-service:8081"
-      AUDIT_DB_PATH: "/data/audit/avoc_audit.db"
+      DATABASE_URL: "postgres://avoc:${DB_PASSWORD}@postgres:5432/avoc?sslmode=disable"
       LOG_LEVEL: "info"
       WHIP_STREAM_KEY: ${WHIP_STREAM_KEY}
       MEDIAMTX_API_URL: "http://mediamtx:9997"
@@ -42,11 +60,13 @@ services:
       TURN_PORT: "3478"
       TURN_USER: ${TURN_USER}
       TURN_PASSWORD: ${TURN_PASSWORD}
-    volumes:
-      - audit-data:/data/audit
     depends_on:
-      - auth-service
-      - safety-service
+      postgres:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      safety-service:
+        condition: service_started
     networks:
       - avoc-net
     restart: unless-stopped
@@ -59,6 +79,11 @@ services:
     environment:
       AUTH_PORT: "8081"
       JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: "postgres://avoc:${DB_PASSWORD}@postgres:5432/avoc?sslmode=disable"
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - avoc-net
     restart: unless-stopped
@@ -217,6 +242,6 @@ networks:
     driver: bridge
 
 volumes:
-  audit-data:
+  postgres-data:
   loki-data:
   grafana-data:

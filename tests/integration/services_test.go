@@ -53,8 +53,9 @@ func TestIntegration_SafetyService_Healthy(t *testing.T) {
 // --- Auth Service ---
 
 func TestIntegration_Auth_OperatorLogin_ReturnsJWT(t *testing.T) {
+	// Uses the auto-seeded admin account (ADMIN_PASSWORD=admin_test_secret in docker-compose.test.yml)
 	resp := postJSON(t, authURL+"/auth/operator/login",
-		map[string]string{"id": "op-int-test", "password": "test"})
+		map[string]string{"id": "admin", "password": "admin_test_secret"})
 	defer resp.Body.Close()
 	assert.Equal(t, 200, resp.StatusCode)
 
@@ -90,9 +91,9 @@ func TestIntegration_ControlServer_InitialState_IsIDLE(t *testing.T) {
 // --- Session Lifecycle ---
 
 func TestIntegration_SessionLifecycle_StartAndEnd(t *testing.T) {
-	// 1. Login
+	// 1. Login using seeded admin account
 	resp := postJSON(t, authURL+"/auth/operator/login",
-		map[string]string{"id": "op-lifecycle", "password": "test"})
+		map[string]string{"id": "admin", "password": "admin_test_secret"})
 	defer resp.Body.Close()
 	require.Equal(t, 200, resp.StatusCode)
 	var loginBody map[string]any
@@ -119,7 +120,7 @@ func TestIntegration_SessionLifecycle_StartAndEnd(t *testing.T) {
 	// 3. Start session
 	resp2 := postJSON(t, controlURL+"/session/start", map[string]string{
 		"vehicle_id":    "vehicle-int-1",
-		"operator_id":   "op-lifecycle",
+		"operator_id":   "admin",
 		"operator_role": "ACTIVE_OPERATOR",
 	})
 	defer resp2.Body.Close()
@@ -144,9 +145,9 @@ func TestIntegration_SessionLifecycle_StartAndEnd(t *testing.T) {
 // --- MEDIA STATE: Invariante 1 ---
 
 func TestIntegration_MediaFailed_TriggersDegrade_NeverSafeMode(t *testing.T) {
-	// Login + WS connect + session start
+	// Login + WS connect + session start (seeded admin account)
 	resp := postJSON(t, authURL+"/auth/operator/login",
-		map[string]string{"id": "op-media", "password": "test"})
+		map[string]string{"id": "admin", "password": "admin_test_secret"})
 	defer resp.Body.Close()
 	require.Equal(t, 200, resp.StatusCode)
 	var body map[string]any
@@ -161,7 +162,7 @@ func TestIntegration_MediaFailed_TriggersDegrade_NeverSafeMode(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 
 	postJSON(t, controlURL+"/session/start", map[string]string{
-		"vehicle_id": "vehicle-media", "operator_id": "op-media", "operator_role": "ACTIVE_OPERATOR",
+		"vehicle_id": "vehicle-media", "operator_id": "admin", "operator_role": "ACTIVE_OPERATOR",
 	}).Body.Close()
 
 	// MEDIA_FAILED event
@@ -180,7 +181,7 @@ func TestIntegration_MediaFailed_TriggersDegrade_NeverSafeMode(t *testing.T) {
 
 func TestIntegration_EmergencyStop_TriggersSafeMode(t *testing.T) {
 	resp := postJSON(t, authURL+"/auth/operator/login",
-		map[string]string{"id": "op-estop", "password": "test"})
+		map[string]string{"id": "admin", "password": "admin_test_secret"})
 	defer resp.Body.Close()
 	require.Equal(t, 200, resp.StatusCode)
 	var body map[string]any
@@ -195,7 +196,7 @@ func TestIntegration_EmergencyStop_TriggersSafeMode(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 
 	postJSON(t, controlURL+"/session/start", map[string]string{
-		"vehicle_id": "vehicle-estop", "operator_id": "op-estop", "operator_role": "ACTIVE_OPERATOR",
+		"vehicle_id": "vehicle-estop", "operator_id": "admin", "operator_role": "ACTIVE_OPERATOR",
 	}).Body.Close()
 
 	resp2 := postJSON(t, controlURL+"/emergency-stop", map[string]string{})

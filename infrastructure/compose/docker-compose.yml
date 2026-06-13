@@ -16,6 +16,23 @@ services:
     networks:
       - avoc-net
 
+  # ─── PostgreSQL — primäre Datenbank (ADR-023) ─────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: avoc
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-avoc_dev_secret}
+      POSTGRES_DB: avoc
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - avoc-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U avoc -d avoc"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   # ─── Control Server (Hub — Safety Truth, Session Manager GSA) ─────────────
   control-server:
     build:
@@ -31,7 +48,7 @@ services:
       SAFETY_SERVICE_URL: "http://safety-service:8082"
       SFU_SERVICE_URL: "http://webrtc-sfu:8084"
       AUTH_SERVICE_URL: "http://auth-service:8081"
-      AUDIT_DB_PATH: "/data/audit/avoc_audit.db"
+      DATABASE_URL: "postgres://avoc:${DB_PASSWORD:-avoc_dev_secret}@postgres:5432/avoc?sslmode=disable"
       LOG_LEVEL: "info"
       WHIP_STREAM_KEY: ${WHIP_STREAM_KEY:-dev-stream-key-change-in-production}
       MEDIAMTX_API_URL: "http://host.docker.internal:9997"
@@ -39,13 +56,15 @@ services:
       TURN_PORT: ${TURN_PORT:-3479}
       TURN_USER: ${TURN_USER:-avoc}
       TURN_PASSWORD: ${TURN_PASSWORD:-changeme}
-    volumes:
-      - audit-data:/data/audit
     extra_hosts:
       - "host.docker.internal:host-gateway"   # Damit MEDIAMTX_API_URL auf mediamtx (host network) zeigt
     depends_on:
-      - auth-service
-      - safety-service
+      postgres:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      safety-service:
+        condition: service_started
     networks:
       - avoc-net
 
@@ -61,6 +80,11 @@ services:
     environment:
       AUTH_PORT: "8081"
       JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: "postgres://avoc:${DB_PASSWORD:-avoc_dev_secret}@postgres:5432/avoc?sslmode=disable"
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin_dev_secret}
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - avoc-net
 
@@ -221,6 +245,6 @@ networks:
     driver: bridge
 
 volumes:
-  audit-data:   # SQLite audit store — persistent safety event log (ADR-018)
-  loki-data:    # Loki log storage — 30d retention (ADR-017)
-  grafana-data: # Grafana state (dashboards, alerts)
+  postgres-data: # PostgreSQL primary store — audit_events, vehicles, users (ADR-023)
+  loki-data:     # Loki log storage — 30d retention (ADR-017)
+  grafana-data:  # Grafana state (dashboards, alerts)
