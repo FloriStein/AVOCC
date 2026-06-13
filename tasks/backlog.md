@@ -3,7 +3,7 @@
 Lifecycle: backlog → sprint → done
 Typen: S (<30 Min), M (30–180 Min), L (Architektur, ADR-pflichtig)
 
-Stand: 2026-06-12 — aktualisiert nach Sprint 12 (Vehicle Registry, ADR-022)
+Stand: 2026-06-13 — aktualisiert nach Sprint 13 (Dev-Stack Stabilisierung); Sprint 14 angelegt
 
 ---
 
@@ -215,4 +215,10 @@ Phase 11 — Vehicle Connectivity & Feedback ✅ (abgeschlossen 2026-06-11)
 
 Phase 12 — Vehicle Registry ✅ (abgeschlossen 2026-06-12)
   VEH-REG-01..08 ✅ — ADR-022; SQLite vehicles-Tabelle; VehicleSelector; VEHICLE_ID-Hardcoding entfernt
+
+Phase 13 — Dev-Stack Stabilisierung & Log-Korrelation ✅ (abgeschlossen 2026-06-13)
+  DEV-01..03 ✅ — nginx.dev.conf HTTP-only; vehicle-mock im Build; session_id in TelemetryEvent
+
+Phase 14 — Security & Observability 🔄 (Sprint 14)
+  AUTH-01, UI-01, ROB-01, OBS-01 (Bonus)
 ```
