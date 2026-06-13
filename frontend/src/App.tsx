@@ -125,9 +125,11 @@ export default function App() {
           systemState={state.system}
           operatorState={state.operator}
           sessionId={session.sessionId}
+          vehicleId={session.vehicleId}
           latency={session.latency}
           telemetry={telemetry}
           onStartSession={session.startSession}
+          onEndSession={session.endSession}
         />
       </main>
 

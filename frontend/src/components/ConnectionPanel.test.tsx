@@ -6,6 +6,7 @@ const baseProps = {
   systemState: 'CONNECTED',
   operatorState: 'ACTIVE_OPERATOR',
   sessionId: '01JTXYZABCDEF1234567890',
+  vehicleId: null,
   latency: 0,
 }
 

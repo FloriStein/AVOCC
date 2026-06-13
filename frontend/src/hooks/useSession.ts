@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { login, startSession } from '@/lib/api-client'
+import { login, startSession, endSession as endSessionAPI } from '@/lib/api-client'
 import { WSClient } from '@/lib/ws-client'
 
 const OPERATOR_ID = 'operator-1'
@@ -17,6 +17,7 @@ export interface SessionState {
   resume: () => Promise<void>
   disconnect: () => void
   startSession: (vehicleId: string) => Promise<void>
+  endSession: () => Promise<void>
 }
 
 export function useSession(): SessionState {
@@ -61,6 +62,13 @@ export function useSession(): SessionState {
     }
   }, [])
 
+  // Called when operator deliberately ends a session to pick a different vehicle.
+  // vehicleId is intentionally kept so VehicleSelector can pre-select it on remount.
+  const endSessionFn = useCallback(async () => {
+    await endSessionAPI()
+    setSessionId(null)
+  }, [])
+
   // Resume after SAFE_MODE — full reconnect flow.
   const resume = useCallback(async () => {
     wsClient.disconnect()
@@ -75,5 +83,5 @@ export function useSession(): SessionState {
     setVehicleId(null)
   }, [wsClient])
 
-  return { token, sessionId, vehicleId, latency, wsClient, connect, resume, disconnect, startSession: startSessionFn }
+  return { token, sessionId, vehicleId, latency, wsClient, connect, resume, disconnect, startSession: startSessionFn, endSession: endSessionFn }
 }

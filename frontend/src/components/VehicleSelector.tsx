@@ -3,11 +3,12 @@ import { useVehicles } from '@/hooks/useVehicles'
 
 interface Props {
   onStartSession: (vehicleId: string) => void
+  defaultVehicleId?: string | null
 }
 
-export function VehicleSelector({ onStartSession }: Props) {
+export function VehicleSelector({ onStartSession, defaultVehicleId }: Props) {
   const { vehicles, loading } = useVehicles()
-  const [selected, setSelected] = useState('')
+  const [selected, setSelected] = useState(defaultVehicleId ?? '')
 
   return (
     <div className="flex items-center gap-2 mt-2">

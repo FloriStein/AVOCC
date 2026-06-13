@@ -1,5 +1,6 @@
 // Connection Status Panel — live SYSTEM STATE, latency, session-ID, operator role, telemetry (ADR-016).
 
+import { useState } from 'react'
 import { VehicleSelector } from '@/components/VehicleSelector'
 
 interface TelemetryData {
@@ -12,9 +13,11 @@ interface Props {
   systemState: string
   operatorState: string
   sessionId: string | null
+  vehicleId: string | null
   latency: number
   telemetry?: TelemetryData | null
   onStartSession?: (vehicleId: string) => void
+  onEndSession?: () => Promise<void>
 }
 
 const STATE_COLORS: Record<string, string> = {
@@ -43,8 +46,21 @@ function LatencyColor(ms: number): string {
   return 'text-red-400'
 }
 
-export function ConnectionPanel({ systemState, operatorState, sessionId, latency, telemetry, onStartSession }: Props) {
+export function ConnectionPanel({ systemState, operatorState, sessionId, vehicleId, latency, telemetry, onStartSession, onEndSession }: Props) {
   const shortId = sessionId ? sessionId.slice(0, 8) + '…' : '—'
+  const [ending, setEnding] = useState(false)
+
+  const isActive = systemState === 'CONNECTED' || systemState === 'DEGRADED'
+
+  const handleEndSession = async () => {
+    if (!onEndSession) return
+    setEnding(true)
+    try {
+      await onEndSession()
+    } finally {
+      setEnding(false)
+    }
+  }
 
   return (
     <section className="bg-gray-800 rounded-lg border border-gray-700 p-4 flex flex-col gap-2">
@@ -68,15 +84,42 @@ export function ConnectionPanel({ systemState, operatorState, sessionId, latency
       </div>
 
       <div className="flex justify-between text-sm items-center">
-        <span className="text-gray-400">Session ID</span>
+        <span className="text-gray-400">Session</span>
         <span className="font-mono text-gray-500 text-xs" title={sessionId ?? ''}>
           {shortId}
         </span>
       </div>
 
-      {/* Vehicle selector — shown when AUTHENTICATED and no session active */}
+      {/* Active session — shown when CONNECTED or DEGRADED */}
+      {isActive && (
+        <div className="mt-1 flex flex-col gap-2 border-t border-gray-700 pt-2">
+          <div className="flex justify-between text-sm items-center">
+            <span className="text-gray-400">Fahrzeug</span>
+            <span className="font-mono text-green-400 text-xs">{vehicleId ?? '—'}</span>
+          </div>
+          <button
+            onClick={handleEndSession}
+            disabled={ending}
+            className="w-full py-1.5 px-3 bg-gray-700 hover:bg-red-900 border border-gray-600 hover:border-red-700
+                       disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs text-gray-300
+                       hover:text-red-300 font-semibold transition-colors"
+          >
+            {ending ? 'Beende…' : '⏹ Session beenden'}
+          </button>
+        </div>
+      )}
+
+      {/* Vehicle selector — shown when waiting for session start */}
       {systemState === 'AUTHENTICATED' && onStartSession && (
-        <VehicleSelector onStartSession={onStartSession} />
+        <VehicleSelector
+          onStartSession={onStartSession}
+          defaultVehicleId={vehicleId}
+        />
+      )}
+
+      {/* Reconnecting hint */}
+      {systemState === 'RECOVERING' && (
+        <p className="text-xs text-orange-400 text-center mt-1">Verbinde neu…</p>
       )}
 
       {/* Telemetry — shown when MQTT data is available */}
