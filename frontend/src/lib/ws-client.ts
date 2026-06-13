@@ -67,8 +67,11 @@ export class WSClient {
   }
 
   disconnect(): void {
-    this.ws?.close()
-    this.ws = null
+    if (this.ws) {
+      this.ws.onclose = null   // prevent onClose callback on intentional close
+      this.ws.close()
+      this.ws = null
+    }
   }
 
   isOpen(): boolean {

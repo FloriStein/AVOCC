@@ -28,15 +28,12 @@ export function useSession(): SessionState {
 
   const wsClient = useRef(new WSClient()).current
   const reconnectAttempt = useRef(0)
-  // True while resume() is executing — suppresses the onClose auto-reconnect
-  // that fires when resume() calls wsClient.disconnect() intentionally.
-  const resumingRef = useRef(false)
 
   const connectWS = useCallback((t: string) => {
     wsClient.onAck = (ms) => setLatency(ms)
     wsClient.onClose = async () => {
-      if (resumingRef.current) return   // intentional disconnect — resume() handles reconnect
-      // Exponential backoff reconnect after unexpected Channel Close (ADR-010)
+      // Exponential backoff reconnect after unexpected server-side close (ADR-010).
+      // Intentional closes via wsClient.disconnect() suppress this via ws.onclose = null.
       const delay = BACKOFF[Math.min(reconnectAttempt.current, BACKOFF.length - 1)]
       reconnectAttempt.current++
       await new Promise((r) => setTimeout(r, delay))
@@ -74,20 +71,15 @@ export function useSession(): SessionState {
     setSessionId(null)
   }, [])
 
-  // Resume after SAFE_MODE — intentional WS disconnect + reconnect.
-  // resumingRef suppresses the auto-reconnect in onClose during the disconnect.
+  // Resume after SAFE_MODE: silently close old WS (no onClose callback) and reconnect.
   const resume = useCallback(async () => {
     if (!token) return
-    resumingRef.current = true
     wsClient.disconnect()
-    resumingRef.current = false
     connectWS(token)
   }, [token, wsClient, connectWS])
 
   const disconnect = useCallback(() => {
-    resumingRef.current = true
     wsClient.disconnect()
-    resumingRef.current = false
     setToken(null)
     setSessionId(null)
     setVehicleId(null)
