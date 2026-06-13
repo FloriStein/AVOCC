@@ -4,6 +4,77 @@ Lifecycle: backlog → sprint → done
 
 ---
 
+## Sprint 14 (Partial) — Security & Observability
+
+Abgeschlossen (bisherige Tasks): 2026-06-13
+
+### Tasks
+
+| ID | Task | Typ | Ergebnis |
+|----|------|-----|----------|
+| AUTH-01 | JWT-Pflicht auf REST-Endpoints | M | ✅ `requireJWT`-Middleware; 9 Endpoints geschützt; token in api-client + SafetyPanel + useWebRTC durchgereicht |
+
+### Neue/geänderte Dateien
+
+- `cmd/control-server/main.go` — `requireJWT(secret []byte)` Middleware + 9 geschützte Endpoints
+- `frontend/src/lib/api-client.ts` — `token`-Parameter in `startSession`, `endSession`, `emergencyStop`, `reportMediaState`
+- `frontend/src/hooks/useSession.ts` — Token zu `startSession`/`endSession` durchgereicht; `resumingRef` entfernt
+- `frontend/src/hooks/useWebRTC.ts` — `token` zu `reportMediaState` durchgereicht
+- `frontend/src/components/SafetyPanel.tsx` — `token: string | null` Prop für `emergencyStop`
+- `frontend/src/components/SafetyPanel.test.tsx` — `token={null}` in allen Render-Aufrufen
+- `frontend/src/App.tsx` — `token={session.token}` an `SafetyPanel`
+- `frontend/src/lib/ws-client.ts` — `disconnect()` setzt `ws.onclose = null` vor Close (Race-Condition-Fix)
+
+### Verification — E2E PASS (2026-06-13)
+
+**Surface:** EC2 `18.196.24.10:443`, 13 Container up, curl via SSH.
+
+**AUTH-01 — Geschützte Endpoints (9 Endpoints ohne Token → 401):**
+```
+POST /session/start → 401   POST /session/end    → 401
+POST /emergency-stop → 401  POST /handover/req   → 401
+POST /media/event   → 401   POST /vehicles       → 401
+DELETE /vehicles/x  → 401   GET /audit/events    → 401
+GET /recording/x    → 401
+```
+
+**AUTH-01 — Offene Endpoints (kein Token nötig → 200):**
+```
+GET /state → 200   GET /health → 200   GET /vehicles → 200
+GET /ice-config → 200   POST /log → 202
+```
+
+**AUTH-01 — Edge Cases fehlerhafte Token (alle → 401):**
+- `"Token <jwt>"` (falsches Scheme) → 401
+- `"Bearer "` (leerer Wert) → 401
+- Tampered JWT payload → 401
+- JWT mit anderem Secret signiert → 401
+- Leerer / fehlender Authorization-Header → 401
+
+**AUTH-01 — Business-Logik nach Auth:**
+- session/start mit gültigem Token bei SAFE_MODE → Auth pass, Body: `"system must be in AUTHENTICATED state"` ✅
+- POST /vehicles Duplikat mit Token → 409 ✅
+- POST /vehicles malformed JSON mit Token → 400 ✅
+- DELETE /vehicles nach DELETE → 404 ✅
+- media/event unbekannter State → 400 ✅
+
+**E2E Session-Lifecycle mit JWT:**
+```
+Login → JWT erhalten
+POST /session/start (Token) → 200, session_id=01KV1EA0KTVXXP0V7SRXZXZ7PT
+State → CONNECTED / ACTIVE_OPERATOR
+POST /emergency-stop (Token) → 202
+State → SAFE_MODE / ACTIVE_OPERATOR
+POST /session/end (Token) → 204
+State → SAFE_MODE / NO_OPERATOR  (wartet auf Frontend-Resume — korrekt)
+```
+
+**WSClient-Fix (Doppel-Reconnect-Race):** Kein WS-Client auf EC2 verfügbar → direkt nicht observierbar. Backend-Seiteneffekte: E-Stop → SAFE_MODE korrekt, System bleibt in SAFE_MODE bis Operator-WS-Reconnect (Frontend-Resume). Strukturell korrekt durch `ws.onclose = null` in `disconnect()`. Go Build ✅ · TypeScript ✅ · 41/41 Frontend-Tests ✅.
+
+**⚠️ Finding (pre-existing):** `GET /audit/events?session_id=<unbekannt>` gibt `null` statt `[]` zurück — `json.Encode(nil)` auf nil-Slice. Frontend ruft diesen Endpoint nicht auf; bei späterer Audit-UI defensiv behandeln.
+
+---
+
 ## Sprint 13 — Dev-Stack Stabilisierung & Log-Korrelation
 
 Abgeschlossen: 2026-06-13
