@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"avoc/internal/mediamtx"
 	"avoc/internal/recording"
 	"avoc/internal/vehicleconnection"
+	"avoc/internal/vehicleregistry"
 	"avoc/pkg/audit"
 	"avoc/pkg/logger"
 	"avoc/pkg/ulid"
@@ -69,6 +71,25 @@ func main() {
 	recorder := recording.NewMemoryRecorder()
 	vehicleRegistry := vehicleconnection.NewRegistry()
 	vehicleAckStore := vehicleconnection.NewAckStore()
+
+	// --- Vehicle Registry (ADR-022) ---
+	var vehicleStore vehicleregistry.VehicleStore
+	if sqliteWriter != nil {
+		vs, vsErr := vehicleregistry.NewSQLiteVehicleStore(sqliteWriter.DB(), vehicleRegistry)
+		if vsErr != nil {
+			log.Warn("vehicle registry unavailable", "error", vsErr)
+			vehicleStore = vehicleregistry.NoopVehicleStore{}
+		} else {
+			vehicleStore = vs
+			if seedErr := vs.SeedDefault(); seedErr != nil {
+				log.Warn("vehicle registry seed failed", "error", seedErr)
+			} else {
+				log.Info("vehicle registry ready, vehicle-001 seeded")
+			}
+		}
+	} else {
+		vehicleStore = vehicleregistry.NoopVehicleStore{}
+	}
 
 	cmdEngine := command.NewEngine(sm, safetyPub, sessionMgr, deadman).
 		WithAuditWriter(auditWriter).
@@ -338,6 +359,78 @@ func main() {
 	mux.HandleFunc("GET /dev/whip-key", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"streamKey": whipStreamKey})
+	})
+
+	// Vehicle Registry (ADR-022)
+	mux.HandleFunc("GET /vehicles", func(w http.ResponseWriter, _ *http.Request) {
+		vehicles, err := vehicleStore.List()
+		if err != nil {
+			http.Error(w, "query failed", http.StatusInternalServerError)
+			return
+		}
+		type vehicleJSON struct {
+			ID          string `json:"id"`
+			DisplayName string `json:"display_name"`
+			Description string `json:"description"`
+			Online      bool   `json:"online"`
+		}
+		result := make([]vehicleJSON, len(vehicles))
+		for i, v := range vehicles {
+			result[i] = vehicleJSON{ID: v.ID, DisplayName: v.DisplayName, Description: v.Description, Online: v.Online}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(result)
+	})
+
+	mux.HandleFunc("POST /vehicles", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			ID          string `json:"id"`
+			DisplayName string `json:"display_name"`
+			Description string `json:"description"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+		if req.ID == "" || req.DisplayName == "" {
+			http.Error(w, "id and display_name required", http.StatusBadRequest)
+			return
+		}
+		exists, err := vehicleStore.Exists(req.ID)
+		if err != nil {
+			http.Error(w, "store error", http.StatusInternalServerError)
+			return
+		}
+		if exists {
+			http.Error(w, "vehicle already exists", http.StatusConflict)
+			return
+		}
+		if err := vehicleStore.Add(req.ID, req.DisplayName, req.Description); err != nil {
+			http.Error(w, "add failed", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+	})
+
+	mux.HandleFunc("DELETE /vehicles/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if id == "" {
+			http.Error(w, "id required", http.StatusBadRequest)
+			return
+		}
+		if sess, ok := sessionMgr.GetCurrentSession(); ok && sess.VehicleID == id {
+			http.Error(w, "vehicle is currently in active session", http.StatusConflict)
+			return
+		}
+		if err := vehicleStore.Delete(id); err != nil {
+			if errors.Is(err, vehicleregistry.ErrNotFound) {
+				http.Error(w, "vehicle not found", http.StatusNotFound)
+				return
+			}
+			http.Error(w, "delete failed", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	})
 
 	// State + Health

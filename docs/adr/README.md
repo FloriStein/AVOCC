@@ -6,7 +6,7 @@ Vollständige Live-Übersicht: [DECISIONS.MD](../../DECISIONS.MD)
 
 ---
 
-## ADR-Index (20 ADRs)
+## ADR-Index (22 ADRs)
 
 | ADR | Titel | Kernentscheidung |
 |-----|-------|-----------------|
@@ -31,6 +31,8 @@ Vollständige Live-Übersicht: [DECISIONS.MD](../../DECISIONS.MD)
 | [ADR-018](018-audit-trail-strategy.md) | Audit Trail Strategy | SQLite WAL als AuditWriter; fsync vor SAFE_MODE; garantierte Safety-Event-Persistenz; kein extra Service |
 | [ADR-019](019-deployment-strategy.md) | Deployment-Strategie | Docker Hub + AWS EC2 + SSM Parameter Store; kein Quellcode auf Instanz; CDK Infrastructure Stack |
 | [ADR-020](020-mediamtx-whip-whep.md) | MediaMTX WHIP/WHEP | MediaMTX als WHIP/WHEP Router; Control Server als einzige Auth- und SAFE_MODE-Instanz; Pion SFU passiv |
+| [ADR-021](021-vehicle-connectivity-feedback.md) | Vehicle Connectivity & Feedback | JWT sub=vehicleID; Protobuf end-to-end; WebSocket ACK (Transport) + MQTT Telemetrie (Aktuator-Ist-Werte); vehicle-mock Docker-Service |
+| [ADR-022](022-vehicle-registry.md) | Vehicle Registry | SQLite `vehicles`-Tabelle; VehicleSelector UI; manuelles Pre-configure; SeedDefault vehicle-001; ADR-015-Invariante erhalten |
 
 ---
 
@@ -43,7 +45,7 @@ Vollständige Live-Übersicht: [DECISIONS.MD](../../DECISIONS.MD)
 | DDS-Produktivimplementierung | Nicht in diesem Scope | ADR-002 Folge |
 | Backup-Strategie Audit Store (SQLite → S3) | nach Sprint 9 | ADR-018 Folge — S3-Bucket im CDK vorhanden |
 | HTTPS / TLS-Terminierung auf EC2 | nach Sprint 9 | ADR-019 Folge — für Testphase HTTP akzeptabel |
-| Multi-Vehicle vehicleId-Routing in MediaMTX | Sprint 10 | ADR-020 Folge — Sprint 9 nutzt fixed path `vehicle-001` |
+| Multi-Vehicle vehicleId-Routing in MediaMTX | ✅ entschieden ADR-022 | VehicleSelector + SQLite-Registry; `~^vehicle-.*`-Regex in MediaMTX aktiv |
 
 ---
 

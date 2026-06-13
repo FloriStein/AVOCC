@@ -10,20 +10,20 @@ import type { WSClient } from '@/lib/ws-client'
 interface Props {
   systemState: string
   sessionId: string | null
+  vehicleId: string | null
   wsClient: WSClient | null
 }
 
-const VEHICLE_ID = 'vehicle-1'
 const OPERATOR_ID = 'operator-1'
 
-export function SafetyPanel({ systemState, sessionId, wsClient }: Props) {
+export function SafetyPanel({ systemState, sessionId, vehicleId, wsClient }: Props) {
   const isConnected = systemState === 'CONNECTED' || systemState === 'DEGRADED'
   const isSafeMode = systemState === 'SAFE_MODE'
 
   const deadman = useDeadmanSwitch(
     wsClient,
     sessionId,
-    VEHICLE_ID,
+    vehicleId ?? '',
     OPERATOR_ID,
     isConnected,
   )
@@ -31,9 +31,9 @@ export function SafetyPanel({ systemState, sessionId, wsClient }: Props) {
   const handleEmergencyStop = async () => {
     if (isSafeMode) return
     logEvent(FE_EMERGENCY_STOP, 'Emergency Stop clicked',
-      { sessionId: sessionId ?? '', vehicleId: VEHICLE_ID, operatorId: OPERATOR_ID })
+      { sessionId: sessionId ?? '', vehicleId: vehicleId ?? '', operatorId: OPERATOR_ID })
     try {
-      await emergencyStop(sessionId ?? '', VEHICLE_ID)
+      await emergencyStop(sessionId ?? '', vehicleId ?? '')
     } catch {
       // state polling will detect SAFE_MODE regardless
     }

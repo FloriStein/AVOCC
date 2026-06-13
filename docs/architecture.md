@@ -72,7 +72,7 @@ WebRTC SFU (Pion/Go) — passiv: Session-Event-Subscriber, kein Media-Routing (A
   - Publish (WHIP): Bearer Token == WHIP_STREAM_KEY → 200 / 401
   - Read (WHEP): JWT + aktive Operator-Session → 200 / 401
 - **SAFE_MODE**: Control Server ruft `GET /v3/webrtcsessions/list` → `POST kick/{id}` auf MediaMTX Management API (:9997)
-- **vehicleId-Routing**: Pfad-Regex `~^vehicle-.*`; aktuell `vehicle-001` (hardcoded, Sprint 9)
+- **vehicleId-Routing**: Pfad-Regex `~^vehicle-.*`; vehicleId wird dynamisch aus der Vehicle Registry bezogen (VehicleSelector, ADR-022) — `vehicle-001` ist auto-geseedet
 - **ICE non-trickle**: Browser wartet vollständige ICE-Gathering (`icegatheringstatechange → complete`) vor WHEP-Request
 
 **WebRTC SFU (Pion/Go) — passiver Session-Event-Subscriber (ADR-020):**

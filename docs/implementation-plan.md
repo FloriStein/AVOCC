@@ -1,13 +1,13 @@
 # Implementation Plan — Teleoperation System
 
-Stand: 2026-06-11
-Status: Phase 1–11 abgeschlossen ✅ · Sprint 11 abgeschlossen · 90 Tasks · 21 ADRs · Go Build + 26 Unit Tests + 41 Frontend Tests grün
+Stand: 2026-06-12
+Status: Phase 1–12 abgeschlossen ✅ · Sprint 12 abgeschlossen · 22 ADRs · Go Build + 26 Unit Tests + 41 Frontend Tests grün
 
 ---
 
 ## 1. Executive Summary
 
-Wir bauen ein sicheres, modulares Echtzeit-Teleoperation-System zur Fernsteuerung von Fahrzeugen über das offene Internet (Vehicle ↔ Internet ↔ OCC, uncontrolled routing). Die Architektur ist durch 21 ADRs entschieden. Nach 11 Sprints (90 Tasks) ist das System vollständig implementiert: Frontend, Backend, Video-Channel (MediaMTX WHIP/WHEP, ADR-020), Test-Infrastruktur, Logging (ADR-017/018), Browser-ICE-Migration (Sprint 10), HTTPS und Browser-WHIP-Sender, sowie Vehicle Connectivity & Feedback (Sprint 11, ADR-021): Steuerbefehle werden per WebSocket an das Fahrzeug weitergeleitet, VehicleCommandAck bestätigt den Transport, TelemetryEvent enthält Aktuator-Ist-Werte, InputIndicatorPanel visualisiert sie im Frontend.
+Wir bauen ein sicheres, modulares Echtzeit-Teleoperation-System zur Fernsteuerung von Fahrzeugen über das offene Internet (Vehicle ↔ Internet ↔ OCC, uncontrolled routing). Die Architektur ist durch 22 ADRs entschieden. Nach 12 Sprints ist das System vollständig implementiert: Frontend, Backend, Video-Channel (MediaMTX WHIP/WHEP, ADR-020), Test-Infrastruktur, Logging (ADR-017/018), Browser-ICE-Migration (Sprint 10), Vehicle Connectivity & Feedback (Sprint 11, ADR-021), sowie Vehicle Registry (Sprint 12, ADR-022): Mehrere Fahrzeuge werden in SQLite verwaltet, der Operator wählt vor Session-Start über den VehicleSelector aus, `vehicle-001` wird auto-geseedet.
 
 **Nicht-Verhandelbar:**
 - Safety First — SAFE MODE ist nicht überbrückbar, Video darf SAFE MODE nie triggern
@@ -393,7 +393,7 @@ Control Server als einzige Auth- und SAFE_MODE-Kontrollinstanz über MediaMTX.
 ## 9. Vollständige Task-Übersicht
 
 ```
-90 Tasks gesamt / 11 Epics — Phase 1–11 abgeschlossen ✅
+12 Epics — Phase 1–12 abgeschlossen ✅
 
 Phase 1  ✅ (Sprint 1):  INFRA-01, FE-01, BE-01, BE-02, BE-03, BE-11, DC-01, DC-02, DC-03
 Phase 2  ✅:             BE-06, BE-09, BE-10, BE-12, TEST-01, TEST-02
@@ -406,6 +406,7 @@ Phase 8  ✅ (Sprint 8):  DEPLOY-01..07
 Phase 9  ✅ (Sprint 9):  STREAM-01..09
 Phase 10 ✅ (Sprint 10): WEBRTC-01..11 (E2E Smoke Test Browser WHIP → WHEP bestätigt)
 Phase 11 ✅ (Sprint 11): VEH-01..12 (Go Build + 26 Unit Tests + 41 Frontend Tests grün)
+Phase 12 ✅ (Sprint 12): VEH-REG-01..08 (ADR-022; SQLite vehicles-Tabelle; VehicleSelector; 22 ADRs)
 ```
 
 ---
@@ -467,7 +468,7 @@ Referenz: [`docs/sprints/sprint-11-vehicle-connectivity.md`](sprints/sprint-11-v
 
 ---
 
-## 11. ADR-Index (21 ADRs)
+## 11. ADR-Index (22 ADRs)
 
 | ADR | Titel | Entscheidung |
 |-----|-------|-------------|
@@ -493,3 +494,4 @@ Referenz: [`docs/sprints/sprint-11-vehicle-connectivity.md`](sprints/sprint-11-v
 | [ADR-019](adr/019-deployment-strategy.md) | Deployment-Strategie | Docker Hub private Repos + EC2 Elastic IP + AWS SSM Parameter Store; linux/amd64; kein Quellcode auf EC2 |
 | [ADR-020](adr/020-mediamtx-whip-whep.md) | Video Ingestion & Distribution | MediaMTX WHIP/WHEP; Larix→WHIP; Browser→WHEP; Control Server = einzige Auth-Instanz; Browser-ICE-Gathering via `/api/ice-config` |
 | [ADR-021](adr/021-vehicle-connectivity-feedback.md) | Vehicle Connectivity & Feedback | JWT sub=vehicleID; Protobuf end-to-end; WebSocket ACK (Transport) + MQTT Telemetrie (Aktuator-Ist-Werte); vehicle-mock Docker-Service |
+| [ADR-022](adr/022-vehicle-registry.md) | Vehicle Registry | SQLite `vehicles`-Tabelle (shared DB); VehicleSelector UI; manuelles Pre-configure; SeedDefault vehicle-001; ADR-015-Invariante (1 aktive Session) erhalten |

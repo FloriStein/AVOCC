@@ -16,33 +16,33 @@ vi.mock('@/hooks/useControls', () => ({
 
 describe('ControlPanel', () => {
   it('zeigt Input-Anzeige', () => {
-    render(<ControlPanel wsClient={null} sessionId={null} enabled={true} />)
+    render(<ControlPanel wsClient={null} sessionId={null} vehicleId={null} enabled={true} />)
     expect(screen.getByText('Input')).toBeInTheDocument()
   })
 
   it('zeigt Speed-Slider', () => {
-    render(<ControlPanel wsClient={null} sessionId={null} enabled={true} />)
+    render(<ControlPanel wsClient={null} sessionId={null} vehicleId={null} enabled={true} />)
     expect(screen.getByRole('slider')).toBeInTheDocument()
   })
 
   it('zeigt Keyboard-Hinweis', () => {
-    render(<ControlPanel wsClient={null} sessionId={null} enabled={true} />)
+    render(<ControlPanel wsClient={null} sessionId={null} vehicleId={null} enabled={true} />)
     expect(screen.getByText(/WASD/i)).toBeInTheDocument()
   })
 
   it('zeigt Joystick SVG', () => {
-    const { container } = render(<ControlPanel wsClient={null} sessionId={null} enabled={true} />)
+    const { container } = render(<ControlPanel wsClient={null} sessionId={null} vehicleId={null} enabled={true} />)
     expect(container.querySelector('svg')).toBeInTheDocument()
   })
 
   it('disabled-Zustand setzt opacity-Klasse', () => {
-    const { container } = render(<ControlPanel wsClient={null} sessionId={null} enabled={false} />)
+    const { container } = render(<ControlPanel wsClient={null} sessionId={null} vehicleId={null} enabled={false} />)
     const panel = container.firstChild as HTMLElement
     expect(panel.className).toMatch(/opacity-40/)
   })
 
   it('zeigt Gamepad-Indikator', () => {
-    render(<ControlPanel wsClient={null} sessionId={null} enabled={true} />)
+    render(<ControlPanel wsClient={null} sessionId={null} vehicleId={null} enabled={true} />)
     expect(screen.getByText(/Gamepad/i)).toBeInTheDocument()
   })
 })

@@ -57,6 +57,19 @@ export async function emergencyStop(sessionId: string, vehicleId: string): Promi
   })
 }
 
+export interface VehicleInfo {
+  id: string
+  display_name: string
+  description: string
+  online: boolean
+}
+
+export async function listVehicles(): Promise<VehicleInfo[]> {
+  const res = await fetch('/api/vehicles')
+  if (!res.ok) throw new Error(`listVehicles failed: ${res.status}`)
+  return res.json()
+}
+
 // Reports WebRTC MEDIA STATE changes to the Control Server (ADR-009 Invariant 1).
 // MEDIA_FAILED → DEGRADED on server side — never SAFE_MODE.
 export async function reportMediaState(state: string): Promise<void> {

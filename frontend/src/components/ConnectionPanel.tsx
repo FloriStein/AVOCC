@@ -1,5 +1,7 @@
 // Connection Status Panel — live SYSTEM STATE, latency, session-ID, operator role, telemetry (ADR-016).
 
+import { VehicleSelector } from '@/components/VehicleSelector'
+
 interface TelemetryData {
   speedKmh: number
   batteryPct: number
@@ -12,6 +14,7 @@ interface Props {
   sessionId: string | null
   latency: number
   telemetry?: TelemetryData | null
+  onStartSession?: (vehicleId: string) => void
 }
 
 const STATE_COLORS: Record<string, string> = {
@@ -40,7 +43,7 @@ function LatencyColor(ms: number): string {
   return 'text-red-400'
 }
 
-export function ConnectionPanel({ systemState, operatorState, sessionId, latency, telemetry }: Props) {
+export function ConnectionPanel({ systemState, operatorState, sessionId, latency, telemetry, onStartSession }: Props) {
   const shortId = sessionId ? sessionId.slice(0, 8) + '…' : '—'
 
   return (
@@ -70,6 +73,11 @@ export function ConnectionPanel({ systemState, operatorState, sessionId, latency
           {shortId}
         </span>
       </div>
+
+      {/* Vehicle selector — shown when AUTHENTICATED and no session active */}
+      {systemState === 'AUTHENTICATED' && onStartSession && (
+        <VehicleSelector onStartSession={onStartSession} />
+      )}
 
       {/* Telemetry — shown when MQTT data is available */}
       {telemetry && (

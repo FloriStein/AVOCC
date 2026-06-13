@@ -3,7 +3,7 @@
 Lifecycle: backlog → sprint → done
 Typen: S (<30 Min), M (30–180 Min), L (Architektur, ADR-pflichtig)
 
-Stand: 2026-06-11 — aktualisiert nach Sprint 11 (Vehicle Connectivity & Feedback, ADR-021)
+Stand: 2026-06-12 — aktualisiert nach Sprint 12 (Vehicle Registry, ADR-022)
 
 ---
 
@@ -124,6 +124,21 @@ LOG-10 → LOG-11 (nach LOG-02)
 
 ---
 
+## EPIC: Vehicle Registry (Sprint 12) ✅
+
+| ID | Task | Typ | Status | Ergebnis |
+|----|------|-----|--------|----------|
+| VEH-REG-01 | ADR-022 — Vehicle Registry Architecture | L | ✅ Sprint 12 | `docs/adr/022-vehicle-registry.md` |
+| VEH-REG-02 | `pkg/audit/sqlite_writer.go` — `DB() *sql.DB` getter | S | ✅ Sprint 12 | Shared WAL-Connection für vehicleregistry |
+| VEH-REG-03 | `internal/vehicleregistry/` — VehicleStore, SQLiteVehicleStore, NoopVehicleStore | M | ✅ Sprint 12 | ErrNotFound-Sentinel; ConnectionChecker Interface |
+| VEH-REG-04 | `cmd/control-server/main.go` — Store-Init + `GET/POST/DELETE /vehicles` | M | ✅ Sprint 12 | SeedDefault vehicle-001; 404 bei DELETE nicht-existent; 409 bei aktiver Session |
+| VEH-REG-05 | `frontend/src/lib/api-client.ts` + `useVehicles.ts` | S | ✅ Sprint 12 | `VehicleInfo`, `listVehicles()`, 2s-Polling Hook |
+| VEH-REG-06 | `frontend/src/hooks/useSession.ts` — `startSession(vehicleId)` | M | ✅ Sprint 12 | VEHICLE_ID-Hardcoding entfernt; expliziter Operator-Entscheid |
+| VEH-REG-07 | `frontend/src/components/VehicleSelector.tsx` | M | ✅ Sprint 12 | Dropdown mit Online-Indikator + "Session starten"-Button |
+| VEH-REG-08 | `SafetyPanel.tsx` + `ControlPanel.tsx` + `ConnectionPanel.tsx` + `App.tsx` | M | ✅ Sprint 12 | vehicleId-Prop-Chain; Auto-Start entfernt |
+
+---
+
 ## EPIC: Vehicle Connectivity & Feedback (Sprint 11) ✅
 
 | ID | Task | Typ | Status | Ergebnis |
@@ -169,7 +184,7 @@ LOG-10 → LOG-11 (nach LOG-02)
 | Migration zu AWS ECR | offen | ADR-019 Folge — für Produktivbetrieb |
 | HTTPS / TLS-Terminierung auf EC2 | offen | ADR-019 Folge — für Testphase HTTP akzeptabel |
 | MQTT-Authentifizierung (Mosquitto Passwort-File) | offen | Port 1883 aktuell ohne Auth offen |
-| Multi-Vehicle / vehicleId-Routing in MediaMTX | offen | ADR-020 Folge — Sprint 10 nutzt fixed path `vehicle-001` |
+| Multi-Vehicle / vehicleId-Routing in MediaMTX | ✅ ADR-022 | VehicleSelector + SQLite-Registry; `~^vehicle-.*`-Regex aktiv |
 | E2E Smoke Test mit aktiver WHIP-Quelle | offen | WEBRTC-09 Rest — Browser WiFi + 5G ICE-Pair verifizieren |
 | Dev-Stack SSL-Fix: nginx.conf dev/prod trennen | offen | Sprint-10-Regression — `make up` startet Frontend nicht ohne SSL-Cert |
 | vehicle-mock in Makefile GO_SERVICES | offen | build-prod + push übersehen vehicle-mock |
@@ -197,4 +212,7 @@ Phase 10 — Browser WebRTC ICE Migration ✅ (deployed 2026-06-10)
 
 Phase 11 — Vehicle Connectivity & Feedback ✅ (abgeschlossen 2026-06-11)
   VEH-01..12 ✅ — Go Build + 26/26 Unit Tests + 41/41 Frontend Tests grün
+
+Phase 12 — Vehicle Registry ✅ (abgeschlossen 2026-06-12)
+  VEH-REG-01..08 ✅ — ADR-022; SQLite vehicles-Tabelle; VehicleSelector; VEHICLE_ID-Hardcoding entfernt
 ```

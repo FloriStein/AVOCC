@@ -1,19 +1,9 @@
-# Sprint 11 — Vehicle Connectivity & Feedback ✅
+# Sprint 12 — Vehicle Registry (ADR-022) ✅
 
-Ziel: Steuerbefehle kommen tatsächlich beim Fahrzeug an. Operator sieht Aktuator-Ist-Werte.
+Ziel: Mehrere Fahrzeuge können in einer SQLite-Datenbank verwaltet werden. Operator wählt vor Session-Start explizit ein Fahrzeug aus.
 
-Datum: 2026-06-11 | **Status: Abgeschlossen ✅**
-Vorgänger: Sprint 10 ✅ (Browser WebRTC ICE Migration + HTTPS + Browser WHIP Sender)
-
-Vollständige Dokumentation: [`docs/sprints/sprint-11-vehicle-connectivity.md`](../docs/sprints/sprint-11-vehicle-connectivity.md)
-Verification Report: [`docs/sprints/sprint-11-verification.md`](../docs/sprints/sprint-11-verification.md)
-
----
-
-## Root Cause: Critical Gap
-
-Vor diesem Sprint wurden Steuerbefehle **nie** zum Fahrzeug weitergeleitet.
-`readLoop` in `internal/vehicleconnection/handler.go` hat alle eingehenden Nachrichten still verworfen.
+Datum: 2026-06-12 | **Status: Abgeschlossen ✅**
+Vorgänger: Sprint 11 ✅ (Vehicle Connectivity & Feedback, ADR-021)
 
 ---
 
@@ -21,49 +11,51 @@ Vor diesem Sprint wurden Steuerbefehle **nie** zum Fahrzeug weitergeleitet.
 
 | ID | Task | Typ | Status |
 |----|------|-----|--------|
-| VEH-01 | ADR-021 — Vehicle Connectivity & Feedback Architecture | L | ✅ |
-| VEH-02 | `proto/vehicle.proto` — VehicleCommandAck | S | ✅ |
-| VEH-03 | `proto/telemetry.proto` — Actuation Fields 7–11 | S | ✅ |
-| VEH-04 | `internal/vehicleconnection/registry.go` — Registry + ForwardCommand | M | ✅ |
-| VEH-05 | `internal/vehicleconnection/ackstore.go` — AckStore | S | ✅ |
-| VEH-06 | `internal/controlserver/command/engine.go` — VehicleForwarder Interface | M | ✅ |
-| VEH-07 | `cmd/control-server/main.go` — Verdrahtung + `GET /vehicle/ack/latest/` | M | ✅ |
-| VEH-08 | `cmd/vehicle-mock/main.go` — JWT self-gen, WS, Protobuf, MQTT, Lerp | L | ✅ |
-| VEH-09 | `vehicle-mock.Dockerfile` + Compose + nginx `/vehicle/` Proxy | M | ✅ |
-| VEH-10 | `useVehicleAck.ts` — Hook 500ms-Polling `/vehicle/ack/latest/` | S | ✅ |
-| VEH-11 | `InputIndicatorPanel.tsx` — Lenkrad-SVG + ActuationBars + AckBadge | M | ✅ |
-| VEH-12 | Tests: `vehicleconnection_test.go` (7) + `InputIndicatorPanel.test.tsx` (7) | M | ✅ |
+| VEH-REG-01 | ADR-022 — Vehicle Registry Architecture | L | ✅ |
+| VEH-REG-02 | `pkg/audit/sqlite_writer.go` — `DB() *sql.DB` getter | S | ✅ |
+| VEH-REG-03 | `internal/vehicleregistry/` — VehicleStore Interface + SQLiteVehicleStore + NoopVehicleStore | M | ✅ |
+| VEH-REG-04 | `cmd/control-server/main.go` — Store-Init, SeedDefault, `GET/POST/DELETE /vehicles` | M | ✅ |
+| VEH-REG-05 | `frontend/src/lib/api-client.ts` — `VehicleInfo` + `listVehicles()` | S | ✅ |
+| VEH-REG-06 | `frontend/src/hooks/useVehicles.ts` — 2s-Polling Hook | S | ✅ |
+| VEH-REG-07 | `frontend/src/hooks/useSession.ts` — `startSession(vehicleId)` statt hardcoded VEHICLE_ID | M | ✅ |
+| VEH-REG-08 | `frontend/src/components/VehicleSelector.tsx` — Dropdown + "Session starten"-Button | M | ✅ |
+| VEH-REG-09 | `SafetyPanel.tsx` + `ControlPanel.tsx` — `vehicleId: string \| null` Prop | S | ✅ |
+| VEH-REG-10 | `frontend/src/components/ConnectionPanel.tsx` — VehicleSelector bei AUTHENTICATED | S | ✅ |
+| VEH-REG-11 | `frontend/src/App.tsx` — Auto-Start entfernt, vehicleId-Prop-Chain | M | ✅ |
+| VEH-REG-12 | Bugfix: `DELETE /vehicles/{id}` → 404 wenn nicht gefunden (ErrNotFound-Sentinel) | S | ✅ |
+| VEH-REG-13 | Bugfix: `POST /vehicles` — malformed JSON → `"invalid JSON"` (getrennt von Feldvalidierung) | S | ✅ |
 
 ---
 
 ## Verification (E2E bestätigt)
 
-- ✅ Go Build EXIT 0
-- ✅ 26/26 Unit Tests (19 Safety + 7 vehicleconnection)
-- ✅ 41/41 Frontend Tests
-- ✅ STEER=0.75 → ACK <500ms → steer_actual=0.6375 (15% Lag, Lerp korrekt)
-- ✅ SAFE_MODE bei WS-Disconnect (Safety-Invarianten intakt)
-- ⚠️ Finding: `make up` startet Frontend lokal nicht ohne SSL-Cert (Sprint-10-Regression)
+- ✅ Docker build EXIT 0 (Go + TypeScript)
+- ✅ `vehicle-001` auto-geseedet beim Start, `online: true` (vehicle-mock verbunden)
+- ✅ `POST /vehicles` → 201; Duplikat → 409; fehlende Felder → 400; kaputtes JSON → 400 "invalid JSON"
+- ✅ `DELETE /vehicles/{id}` → 204 (existiert), 404 (nicht gefunden), 409 (aktive Session)
+- ✅ Persistenz: vehicle-002 überlebt control-server Neustart; SeedDefault kein Duplikat
+- ✅ SQL-Injection-Probe: Parameterized Queries schützen korrekt
+- ✅ Vite-Proxy liefert `/api/vehicles` korrekt
+- ✅ `VEHICLE_ID`-Hardcoding vollständig entfernt aus allen Frontend-Komponenten
 
 ---
 
 ## Definition of Done
 
-- [x] ControlCommand per WebSocket an Fahrzeug weitergeleitet (VehicleForwarder)
-- [x] vehicle-mock: JWT self-gen, WS connect, Protobuf decode, ACK senden
-- [x] VehicleCommandAck gespeichert, per `GET /vehicle/ack/latest/` abrufbar
-- [x] TelemetryEvent mit Aktuator-Ist-Werten (steer/throttle, 15% Lag via Lerp)
-- [x] InputIndicatorPanel: Lenkrad-SVG + ActuationBars + AckBadge im Footer
-- [x] ADR-021 dokumentiert
-- [x] Verification Report erstellt
-- [x] Alle Tests grün (Go Build + 26 Unit + 41 Frontend)
+- [x] ADR-022 dokumentiert
+- [x] `vehicles`-Tabelle in bestehender audit.db (shared WAL-Connection)
+- [x] `GET/POST/DELETE /vehicles` Endpoints mit korrekten Status-Codes
+- [x] VehicleSelector erscheint im ConnectionPanel bei AUTHENTICATED
+- [x] `vehicle-001` auto-geseedet (INSERT OR IGNORE), backward-kompatibel mit vehicle-mock
+- [x] Online-Status live aus WS-Registry (nicht persistiert)
+- [x] ADR-015-Invariante (1 aktive Session) bleibt erhalten — DELETE aktives Fahrzeug → 409
 
 ---
 
-## Nächste Schritte (Sprint 12 — Backlog)
+## Nächste Schritte (Backlog)
 
-Kein aktiver Sprint. Offene Punkte aus Backlog:
 - Dev-Stack SSL-Fix: nginx.conf dev/prod trennen (Sprint-10-Regression)
 - E2E Smoke Test auf EC2 mit Fahrzeug-Feedback
 - vehicle-mock zu Makefile GO_SERVICES hinzufügen
 - session_id in MQTT-TelemetryEvent (vehicle-mock Session-Kontext)
+- Admin-UI für Vehicle CRUD (aktuell nur via curl/API)

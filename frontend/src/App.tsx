@@ -11,8 +11,6 @@ import { ControlPanel } from "@/components/ControlPanel";
 import { InputIndicatorPanel } from "@/components/InputIndicatorPanel";
 import { StreamSenderPanel } from "@/components/StreamSenderPanel";
 
-const VEHICLE_ID = "vehicle-001";
-
 const STATE_COLORS: Record<string, string> = {
   IDLE: "bg-gray-500",
   CONNECTING: "bg-blue-500",
@@ -43,8 +41,8 @@ const OPERATOR_ROLE_LABEL: Record<string, string> = {
 export default function App() {
   const state = useSystemState();
   const session = useSession();
-  const telemetry = useTelemetry(session.sessionId ? VEHICLE_ID : null);
-  const vehicleAck = useVehicleAck(session.sessionId ? VEHICLE_ID : null);
+  const telemetry = useTelemetry(session.vehicleId);
+  const vehicleAck = useVehicleAck(session.vehicleId);
   const [showSender, setShowSender] = useState(false);
 
   const isConnected =
@@ -56,13 +54,6 @@ export default function App() {
     session.connect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // When AUTHENTICATED → start session (AUTHENTICATED → CONNECTED)
-  useEffect(() => {
-    if (state.system === "AUTHENTICATED") {
-      session.startSessionIfNeeded();
-    }
-  }, [state.system, session]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
@@ -116,7 +107,7 @@ export default function App() {
         {/* Video Panel — 2 columns, 2 rows */}
         <VideoPanel
           sessionId={session.sessionId}
-          vehicleId={session.vehicleId}
+          vehicleId={session.vehicleId ?? ''}
           token={session.token}
           enabled={isConnected}
         />
@@ -125,16 +116,18 @@ export default function App() {
         <SafetyPanel
           systemState={state.system}
           sessionId={session.sessionId}
+          vehicleId={session.vehicleId}
           wsClient={session.wsClient}
         />
 
-        {/* Connection + Telemetry Panel */}
+        {/* Connection + Telemetry + Vehicle Selector */}
         <ConnectionPanel
           systemState={state.system}
           operatorState={state.operator}
           sessionId={session.sessionId}
           latency={session.latency}
           telemetry={telemetry}
+          onStartSession={session.startSession}
         />
       </main>
 
@@ -146,6 +139,7 @@ export default function App() {
         <ControlPanel
           wsClient={session.wsClient}
           sessionId={session.sessionId}
+          vehicleId={session.vehicleId}
           enabled={isConnected}
         />
         <InputIndicatorPanel telemetry={telemetry} ack={vehicleAck} />

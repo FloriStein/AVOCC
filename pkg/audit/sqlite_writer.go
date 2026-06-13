@@ -119,6 +119,9 @@ func (w *SQLiteAuditWriter) QueryBySession(sessionID string) ([]SafetyAuditEvent
 	return events, rows.Err()
 }
 
+// DB returns the underlying *sql.DB so other packages can share the connection.
+func (w *SQLiteAuditWriter) DB() *sql.DB { return w.db }
+
 func (w *SQLiteAuditWriter) Close() error {
 	return w.db.Close()
 }

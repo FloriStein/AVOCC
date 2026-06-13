@@ -168,7 +168,8 @@ docker compose -f tests/docker-compose.test.yml down
 │   │   ├── statemachine/   # 4-Layer State Machine
 │   │   └── transport/      # WebSocket Transport Layer
 │   ├── safetyservice/      # Safety Event Bus (In-Memory)
-│   └── vehicleconnection/  # Vehicle WebSocket Handler
+│   ├── vehicleconnection/  # Vehicle WebSocket Handler
+│   └── vehicleregistry/    # Vehicle Registry (ADR-022) — SQLiteVehicleStore, VehicleStore Interface
 ├── pkg/ulid/               # ULID-Wrapper (ADR-016)
 ├── proto/                  # .proto Source — Single Source of Truth
 ├── gen/                    # Generated Code — gitignored
@@ -187,7 +188,7 @@ docker compose -f tests/docker-compose.test.yml down
 
 ## Implementierungsstand
 
-**Phasen 1–9 abgeschlossen — 67/67 Tasks ✅**
+**Phasen 1–12 abgeschlossen ✅**
 
 | Feature | Implementiert |
 |---------|--------------|
@@ -208,7 +209,13 @@ docker compose -f tests/docker-compose.test.yml down
 
 **Sprint 8 (EC2 Deployment) ✅:** Docker Hub multi-arch Images · docker-compose.prod.yml · deploy.sh + setup-ssm.sh (AWS SSM) · coturn EC2-Config · Grafana-Login abgesichert · EC2 Bootstrap Guide
 
-**Sprint 9 (WebRTC Videostream) ✅:** MediaMTX WHIP/WHEP-Router · Larix Broadcaster → MediaMTX → Browser · Control Server Auth-Hook (externalAuthenticationURL) · SAFE_MODE → MediaMTX API (KickVehicle) · Larix Setup Guide · vehicleId vehicle-001
+**Sprint 9 (WebRTC Videostream) ✅:** MediaMTX WHIP/WHEP-Router · Larix Broadcaster → MediaMTX → Browser · Control Server Auth-Hook (externalAuthenticationURL) · SAFE_MODE → MediaMTX API (KickVehicle) · Larix Setup Guide
+
+**Sprint 10 (Browser WebRTC ICE Migration) ✅:** coturn STUN/TURN · `GET /ice-config` Endpoint · DTLS-Client-Fix · Browser WHIP Sender (StreamSenderPanel) · HTTPS nginx-Config
+
+**Sprint 11 (Vehicle Connectivity & Feedback) ✅:** Steuerbefehle per WebSocket an Fahrzeug weitergeleitet · VehicleCommandAck <500ms · TelemetryEvent Aktuator-Ist-Werte · InputIndicatorPanel (Lenkrad-SVG + ActuationBars) · vehicle-mock Docker-Service
+
+**Sprint 12 (Vehicle Registry) ✅:** SQLite `vehicles`-Tabelle · `GET/POST/DELETE /vehicles` · VehicleSelector UI · `vehicle-001` auto-geseedet · VEHICLE_ID-Hardcoding entfernt · ADR-022
 
 ---
 
@@ -225,8 +232,11 @@ docker compose -f tests/docker-compose.test.yml down
 | Sprint 7 | Logging & Audit Trail — slog, SQLite AuditWriter, Loki + Grafana, Frontend logger.ts | ✅ |
 | Sprint 8 | EC2 Deployment — Docker Hub, deploy.sh, SSM Parameter Store, CDK Stack | ✅ |
 | Sprint 9 | WebRTC Videostream — MediaMTX WHIP/WHEP, Larix Broadcaster, Auth-Hook | ✅ |
+| Sprint 10 | Browser WebRTC ICE Migration — coturn, `/ice-config`, DTLS-Fix, Browser WHIP Sender | ✅ |
+| Sprint 11 | Vehicle Connectivity & Feedback — WS-Forwarding, ACK, vehicle-mock, InputIndicatorPanel | ✅ |
+| Sprint 12 | Vehicle Registry — SQLite `vehicles`, VehicleSelector UI, ADR-022 | ✅ |
 
-→ Abgeschlossen: alle 9 Sprints | Backlog: [tasks/backlog.md](tasks/backlog.md)
+→ Abgeschlossen: alle 12 Sprints | Backlog: [tasks/backlog.md](tasks/backlog.md)
 
 ---
 

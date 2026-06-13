@@ -3,7 +3,6 @@ import { login, startSession } from '@/lib/api-client'
 import { WSClient } from '@/lib/ws-client'
 
 const OPERATOR_ID = 'operator-1'
-const VEHICLE_ID = 'vehicle-001'
 
 // Exponential backoff delays in ms (1s, 2s, 4s, 8s, max 30s).
 const BACKOFF = [1000, 2000, 4000, 8000, 16000, 30000]
@@ -11,22 +10,22 @@ const BACKOFF = [1000, 2000, 4000, 8000, 16000, 30000]
 export interface SessionState {
   token: string | null
   sessionId: string | null
-  vehicleId: string
+  vehicleId: string | null
   latency: number
   wsClient: WSClient
   connect: () => Promise<void>
   resume: () => Promise<void>
   disconnect: () => void
-  startSessionIfNeeded: () => Promise<void>
+  startSession: (vehicleId: string) => Promise<void>
 }
 
 export function useSession(): SessionState {
   const [token, setToken] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [vehicleId, setVehicleId] = useState<string | null>(null)
   const [latency, setLatency] = useState(0)
 
   const wsClient = useRef(new WSClient()).current
-  const sessionStartedRef = useRef(false)
   const reconnectAttempt = useRef(0)
 
   const connectWS = useCallback((t: string) => {
@@ -42,30 +41,28 @@ export function useSession(): SessionState {
   }, [wsClient])
 
   const connect = useCallback(async () => {
-    sessionStartedRef.current = false
     reconnectAttempt.current = 0
     const t = await login(OPERATOR_ID)
     setToken(t)
     setSessionId(null)
+    setVehicleId(null)
     connectWS(t)
   }, [connectWS])
 
-  // Called from App when SYSTEM STATE becomes AUTHENTICATED.
-  const startSessionIfNeeded = useCallback(async () => {
-    if (sessionStartedRef.current) return
-    sessionStartedRef.current = true
+  // Called by VehicleSelector when the operator clicks "Session starten".
+  const startSessionFn = useCallback(async (vid: string) => {
     try {
-      const sid = await startSession(VEHICLE_ID, OPERATOR_ID)
+      const sid = await startSession(vid, OPERATOR_ID)
       setSessionId(sid)
+      setVehicleId(vid)
       reconnectAttempt.current = 0
     } catch {
-      sessionStartedRef.current = false
+      // caller can retry
     }
   }, [])
 
   // Resume after SAFE_MODE — full reconnect flow.
   const resume = useCallback(async () => {
-    sessionStartedRef.current = false
     wsClient.disconnect()
     if (!token) return
     connectWS(token)
@@ -75,8 +72,8 @@ export function useSession(): SessionState {
     wsClient.disconnect()
     setToken(null)
     setSessionId(null)
-    sessionStartedRef.current = false
+    setVehicleId(null)
   }, [wsClient])
 
-  return { token, sessionId, vehicleId: VEHICLE_ID, latency, wsClient, connect, resume, disconnect, startSessionIfNeeded }
+  return { token, sessionId, vehicleId, latency, wsClient, connect, resume, disconnect, startSession: startSessionFn }
 }
