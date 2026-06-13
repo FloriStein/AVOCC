@@ -158,7 +158,10 @@ export function useWebRTC(sessionId: string | null, vehicleId: string, token: st
       try {
         const stats = await pc.getStats()
         stats.forEach(r => {
-          if (r.type === 'candidate-pair' && r.nominated && typeof r.currentRoundTripTime === 'number') {
+          // currentRoundTripTime is 0 until the first STUN consent check (~5s after ICE).
+          // Ignore 0 so the UI shows "— ms" instead of a misleading "0 ms".
+          if (r.type === 'candidate-pair' && r.nominated &&
+              typeof r.currentRoundTripTime === 'number' && r.currentRoundTripTime > 0) {
             setVideoLatencyMs(Math.round(r.currentRoundTripTime * 1000))
           }
         })

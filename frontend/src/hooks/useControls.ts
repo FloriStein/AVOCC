@@ -54,6 +54,10 @@ export function useControls(
   const joyActiveRef = useRef(false)
   const joyPosRef = useRef({ x: 0, y: 0 })
   const speedRef = useRef(speedMultiplier)
+  // Tracks whether any input was active on the previous tick.
+  // Used to send a single STEER=0/THROTTLE=0 command on the transition to neutral,
+  // so the vehicle mock resets its commanded values (and telemetry clears).
+  const wasInputActiveRef = useRef(false)
 
   useEffect(() => { speedRef.current = speedMultiplier }, [speedMultiplier])
 
@@ -91,11 +95,17 @@ export function useControls(
         const tv = Math.abs(gp.axes[1]) > 0.1 ? -gp.axes[1] * s : 0
         const bv = gp.buttons[6]?.value ?? 0
         if (sv !== 0 || tv !== 0 || bv > 0.1) {
+          wasInputActiveRef.current = true
           if (sv !== 0) sendCmd(CommandType?.STEER ?? 1, sv)
           if (tv !== 0) sendCmd(CommandType?.THROTTLE ?? 2, tv)
           if (bv > 0.1) sendCmd(CommandType?.BRAKE ?? 3, bv)
           setSteer(sv); setThrottle(tv); setActiveMode('gamepad')
         } else {
+          if (wasInputActiveRef.current) {
+            sendCmd(CommandType?.STEER ?? 1, 0)
+            sendCmd(CommandType?.THROTTLE ?? 2, 0)
+            wasInputActiveRef.current = false
+          }
           setSteer(0); setThrottle(0); setActiveMode('none')
         }
         return
@@ -104,6 +114,7 @@ export function useControls(
 
       // Priority 2: Virtual Joystick
       if (joyActiveRef.current) {
+        wasInputActiveRef.current = true
         const { x, y } = joyPosRef.current
         const sv = x * s
         const tv = y * s
@@ -122,10 +133,16 @@ export function useControls(
       if (keys.has('KeyS') || keys.has('ArrowDown')) tv -= 1
 
       if (sv !== 0 || tv !== 0) {
+        wasInputActiveRef.current = true
         if (sv !== 0) sendCmd(CommandType?.STEER ?? 1, sv * s)
         if (tv !== 0) sendCmd(CommandType?.THROTTLE ?? 2, tv * s)
         setSteer(sv * s); setThrottle(tv * s); setActiveMode('keyboard')
       } else {
+        if (wasInputActiveRef.current) {
+          sendCmd(CommandType?.STEER ?? 1, 0)
+          sendCmd(CommandType?.THROTTLE ?? 2, 0)
+          wasInputActiveRef.current = false
+        }
         setSteer(0); setThrottle(0); setActiveMode('none')
       }
     }, INTERVAL_MS)
