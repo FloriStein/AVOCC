@@ -4,6 +4,31 @@ Lifecycle: backlog → sprint → done
 
 ---
 
+## Sprint 13 — Dev-Stack Stabilisierung & Log-Korrelation
+
+Abgeschlossen: 2026-06-13
+
+### Tasks
+
+| ID | Task | Typ | Ergebnis |
+|----|------|-----|----------|
+| DEV-01 | `nginx.dev.conf` — HTTP-only Dev-nginx; `docker-compose.yml` Volume-Mount | S | ✅ SSL-Fehler beim `make up` behoben |
+| DEV-02 | Makefile: `vehicle-mock` in `build-prod` + `push` | S | ✅ 7 Images statt 6; vehicle-mock.Dockerfile |
+| DEV-03 | `cmd/vehicle-mock/main.go` — `session_id` aus ControlCommand → TelemetryEvent + Ack Header | M | ✅ Vollständige Log-Korrelation über alle Kanäle |
+
+### Neue/geänderte Dateien
+
+- `infrastructure/docker/nginx.dev.conf` — neu (HTTP-only, kein SSL)
+- `infrastructure/compose/docker-compose.yml` — frontend volumes: nginx.dev.conf mount
+- `Makefile` — vehicle-mock in build-prod + push (7 Images)
+- `cmd/vehicle-mock/main.go` — sessionID in state; aus ControlCommand.Header extrahiert; in TelemetryEvent.Header + VehicleCommandAck.Header propagiert
+
+### Verification
+
+Alle drei DEV-Tasks implementiert und compiliert (Docker golang:1.23-alpine OK).
+
+---
+
 ## Sprint 12 — Vehicle Registry (ADR-022)
 
 Abgeschlossen: 2026-06-12

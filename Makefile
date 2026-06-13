@@ -105,11 +105,15 @@ build-prod:
 			-t $(REGISTRY)/avoc-$$svc:$(VERSION) \
 			-f infrastructure/docker/go-service.Dockerfile . --load; \
 	done
+	@echo "  → avoc-vehicle-mock"
+	@docker buildx build --platform $(PLATFORM) \
+		-t $(REGISTRY)/avoc-vehicle-mock:$(VERSION) \
+		-f infrastructure/docker/vehicle-mock.Dockerfile . --load
 	@echo "  → avoc-frontend"
 	@docker buildx build --platform $(PLATFORM) \
 		-t $(REGISTRY)/avoc-frontend:$(VERSION) \
 		-f infrastructure/docker/frontend.Dockerfile . --load
-	@echo "[build-prod] Done — 6 images built for $(PLATFORM)."
+	@echo "[build-prod] Done — 7 images built for $(PLATFORM)."
 
 # Push all images to Docker Hub (runs build-prod first)
 push: build-prod
@@ -117,6 +121,7 @@ push: build-prod
 	@for svc in $(GO_SERVICES); do \
 		docker push $(REGISTRY)/avoc-$$svc:$(VERSION); \
 	done
+	@docker push $(REGISTRY)/avoc-vehicle-mock:$(VERSION)
 	@docker push $(REGISTRY)/avoc-frontend:$(VERSION)
 	@echo "[push] Done. Deploy on EC2: bash scripts/deploy.sh"
 

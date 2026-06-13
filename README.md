@@ -217,6 +217,8 @@ docker compose -f tests/docker-compose.test.yml down
 
 **Sprint 12 (Vehicle Registry) ✅:** SQLite `vehicles`-Tabelle · `GET/POST/DELETE /vehicles` · VehicleSelector UI · `vehicle-001` auto-geseedet · VEHICLE_ID-Hardcoding entfernt · ADR-022
 
+**Sprint 13 (Dev-Stack Stabilisierung & Log-Korrelation) ✅:** `nginx.dev.conf` HTTP-only (`make up` ohne SSL-Fehler) · vehicle-mock in Makefile build-prod/push · `session_id` in TelemetryEvent + VehicleCommandAck propagiert
+
 ---
 
 ## Sprint-Stand
@@ -235,8 +237,9 @@ docker compose -f tests/docker-compose.test.yml down
 | Sprint 10 | Browser WebRTC ICE Migration — coturn, `/ice-config`, DTLS-Fix, Browser WHIP Sender | ✅ |
 | Sprint 11 | Vehicle Connectivity & Feedback — WS-Forwarding, ACK, vehicle-mock, InputIndicatorPanel | ✅ |
 | Sprint 12 | Vehicle Registry — SQLite `vehicles`, VehicleSelector UI, ADR-022 | ✅ |
+| Sprint 13 | Dev-Stack Stabilisierung & Log-Korrelation — nginx.dev.conf, vehicle-mock Makefile, session_id | ✅ |
 
-→ Abgeschlossen: alle 12 Sprints | Backlog: [tasks/backlog.md](tasks/backlog.md)
+→ Abgeschlossen: alle 13 Sprints | Backlog: [tasks/backlog.md](tasks/backlog.md)
 
 ---
 

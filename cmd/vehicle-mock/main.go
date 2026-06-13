@@ -48,6 +48,7 @@ type state struct {
 	throttleActual    float64
 	speedKmh          float64
 	battery           float64
+	sessionID         string
 }
 
 func main() {
@@ -130,6 +131,12 @@ func runConnection(wsURL, token, vehicleID string, mqttClient mqtt.Client, st *s
 
 		applyCommand(cmd, st)
 
+		if cmd.Header != nil {
+			if sid := cmd.Header.SessionId; sid != "" {
+				st.sessionID = sid
+			}
+		}
+
 		// Send VehicleCommandAck
 		eventID := ""
 		if cmd.Header != nil {
@@ -140,6 +147,7 @@ func runConnection(wsURL, token, vehicleID string, mqttClient mqtt.Client, st *s
 				EventId:   ulid.Generate(),
 				VehicleId: vehicleID,
 				Timestamp: time.Now().UnixMilli(),
+				SessionId: st.sessionID,
 			},
 			CommandEventId: eventID,
 			Received:       true,
@@ -179,6 +187,7 @@ func publishTelemetry(mqttClient mqtt.Client, vehicleID string, st *state) {
 			EventId:   ulid.Generate(),
 			VehicleId: vehicleID,
 			Timestamp: time.Now().UnixMilli(),
+			SessionId: st.sessionID,
 		},
 		SpeedKmh:          st.speedKmh,
 		BatteryPct:        st.battery,
