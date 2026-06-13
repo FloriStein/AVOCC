@@ -13,6 +13,9 @@ import { StreamSenderPanel } from "@/components/StreamSenderPanel";
 import LoginPanel from "@/components/LoginPanel";
 import UserManagementPanel from "@/components/UserManagementPanel";
 import { parseTokenRole } from "@/lib/api-client";
+import { SessionState } from "@/hooks/useSession";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const STATE_COLORS: Record<string, string> = {
   IDLE: "bg-gray-500",
@@ -24,6 +27,16 @@ const STATE_COLORS: Record<string, string> = {
   RECOVERING: "bg-orange-500",
 };
 
+const OPERATOR_ROLE_LABEL: Record<string, string> = {
+  NO_OPERATOR: "",
+  OPERATOR_ASSIGNED: "Assigned",
+  ACTIVE_OPERATOR: "Active Operator",
+  HANDOVER_PENDING: "Handover…",
+  RECOVERING_OPERATOR: "Recovering",
+};
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
 function SystemStateBadge({ state }: { state: string }) {
   const color = STATE_COLORS[state] ?? "bg-gray-600";
   return (
@@ -33,56 +46,38 @@ function SystemStateBadge({ state }: { state: string }) {
   );
 }
 
-const OPERATOR_ROLE_LABEL: Record<string, string> = {
-  NO_OPERATOR: "",
-  OPERATOR_ASSIGNED: "Assigned",
-  ACTIVE_OPERATOR: "Active Operator",
-  HANDOVER_PENDING: "Handover…",
-  RECOVERING_OPERATOR: "Recovering",
-};
-
-export default function App() {
+// AppContent mounts only after login — all data-fetching hooks live here.
+// This prevents background polling (useSystemState, useTelemetry, …) during the login screen.
+function AppContent({ session }: { session: SessionState }) {
   const state = useSystemState();
-  const session = useSession();
   const telemetry = useTelemetry(session.vehicleId);
   const vehicleAck = useVehicleAck(session.vehicleId);
-  const [showSender, setShowSender] = useState(false)
+  const [showSender, setShowSender] = useState(false);
   const [videoLatency, setVideoLatency] = useState<number | null>(null);
   const [showUserMgmt, setShowUserMgmt] = useState(false);
 
-  const isConnected =
-    state.system === "CONNECTED" || state.system === "DEGRADED";
+  const isConnected = state.system === "CONNECTED" || state.system === "DEGRADED";
   const isSafeMode = state.system === "SAFE_MODE";
   const isUnreachable = state.unreachable;
-
-  const isAdmin = session.token ? parseTokenRole(session.token) === 'ADMIN' : false;
-
-  // Show login overlay when no token is present
-  if (!session.token) {
-    return <LoginPanel onLogin={session.connect} />
-  }
+  const isAdmin = parseTokenRole(session.token!) === "ADMIN";
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
-      {/* SAFE MODE overlay — blocks everything when system is in SAFE_MODE */}
       {isSafeMode && <SafeModeOverlay onResume={session.resume} />}
 
-      {/* User management overlay — ADMIN only */}
-      {showUserMgmt && session.token && (
+      {showUserMgmt && (
         <UserManagementPanel
-          token={session.token}
-          currentUserId={session.operatorId ?? ''}
+          token={session.token!}
+          currentUserId={session.operatorId ?? ""}
           onClose={() => setShowUserMgmt(false)}
         />
       )}
 
-      {/* Header */}
       <header className="bg-gray-800 border-b border-gray-700 px-6 py-3 flex items-center justify-between">
         <h1 className="text-lg font-bold tracking-wide">
           AVOC — Teleoperation Control Center
         </h1>
         <div className="flex items-center gap-3">
-          {/* Operator role badge */}
           {state.operator !== "NO_OPERATOR" && (
             <span className="text-xs font-mono text-gray-400 bg-gray-700 px-2 py-1 rounded">
               {OPERATOR_ROLE_LABEL[state.operator] ?? state.operator}
@@ -97,7 +92,7 @@ export default function App() {
             </button>
           )}
           <button
-            onClick={() => setShowSender(v => !v)}
+            onClick={() => setShowSender((v) => !v)}
             className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
               showSender
                 ? "bg-indigo-700 text-white"
@@ -116,33 +111,26 @@ export default function App() {
         </div>
       </header>
 
-      {/* UNREACHABLE banner — backend nicht erreichbar */}
       {isUnreachable && (
         <div className="bg-red-950 border-b border-red-700 px-6 py-2 text-red-300 text-sm text-center font-semibold">
           ✕ Backend nicht erreichbar — Steuerung blockiert. Verbindung wird wiederhergestellt…
         </div>
       )}
 
-      {/* DEGRADED banner */}
       {state.system === "DEGRADED" && (
         <div className="bg-yellow-900/50 border-b border-yellow-700 px-6 py-2 text-yellow-300 text-sm text-center">
-          ⚠ DEGRADED — Video oder Telemetrie ausgefallen. Steuerung weiterhin
-          möglich.
+          ⚠ DEGRADED — Video oder Telemetrie ausgefallen. Steuerung weiterhin möglich.
         </div>
       )}
 
-      {/* Main Grid */}
       <main className="flex-1 grid grid-cols-3 grid-rows-2 gap-4 p-4 min-h-0">
-        {/* Video Panel — 2 columns, 2 rows */}
         <VideoPanel
           sessionId={session.sessionId}
-          vehicleId={session.vehicleId ?? ''}
+          vehicleId={session.vehicleId ?? ""}
           token={session.token}
           enabled={isConnected}
           onVideoLatency={setVideoLatency}
         />
-
-        {/* Safety Panel */}
         <SafetyPanel
           systemState={state.system}
           sessionId={session.sessionId}
@@ -150,8 +138,6 @@ export default function App() {
           wsClient={session.wsClient}
           token={session.token}
         />
-
-        {/* Connection + Telemetry + Vehicle Selector */}
         <ConnectionPanel
           systemState={state.system}
           operatorState={state.operator}
@@ -165,10 +151,8 @@ export default function App() {
         />
       </main>
 
-      {/* Stream Sender — collapsible, toggle via header button */}
       {showSender && <StreamSenderPanel />}
 
-      {/* Footer: Operator Inputs + Vehicle Feedback */}
       <footer className="bg-gray-800 border-t border-gray-700">
         <ControlPanel
           wsClient={session.wsClient}
@@ -180,4 +164,18 @@ export default function App() {
       </footer>
     </div>
   );
+}
+
+// ─── Root ─────────────────────────────────────────────────────────────────────
+
+// App only manages the session token. No data-fetching hooks run here,
+// so the login screen is completely idle — no backend polling before login.
+export default function App() {
+  const session = useSession();
+
+  if (!session.token) {
+    return <LoginPanel onLogin={session.connect} />;
+  }
+
+  return <AppContent session={session} />;
 }
